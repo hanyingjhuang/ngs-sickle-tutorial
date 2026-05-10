@@ -1,0 +1,26 @@
+# Notebook outputs / scratch
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+
+# Pipeline artifacts (generated when notebook runs)
+data/trimmed.fq
+data/aligned.sam
+data/aligned.bam
+data/aligned.bam.bai
+data/pile.bcf
+data/pileup.txt
+data/variants.vcf.gz
+data/variants.vcf.gz.csi
+data/qc.json
+data/qc.html
+data/bwa.log
+data/ref.fa.amb
+data/ref.fa.ann
+data/ref.fa.bwt
+data/ref.fa.pac
+data/ref.fa.sa
+data/ref.fa.fai
+qc/
+
+.DS_Store
