@@ -1,6 +1,9 @@
 # NGS pipeline · reads → variants → sickle cell
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hanyingjhuang/ngs-sickle-tutorial/blob/main/notebook.ipynb)
+| version | language | open |
+| --- | --- | --- |
+| **full** (more explanation) | English | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hanyingjhuang/ngs-sickle-tutorial/blob/main/notebook.ipynb) |
+| **simplified** (concise) | 繁體中文 (台灣) | [![Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hanyingjhuang/ngs-sickle-tutorial/blob/main/notebook_zh.ipynb) |
 
 A click-to-run teaching notebook that takes real public sequencing reads end-to-end through a classical short-read variant-calling pipeline and recovers the sickle cell mutation (*HBB* rs334) in a confirmed carrier.
 
