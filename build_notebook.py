@@ -1,20 +1,34 @@
-"""Build the NGS teaching notebook (Colab-runnable)."""
+"""Build the NGS teaching notebook (Colab-runnable).
+
+Design notes:
+- Code cells are source-hidden by default (Colab honors jupyter.source_hidden).
+  Students see the result; click to expand the code.
+- Each step opens with a short schematic illustration (small matplotlib figure)
+  so the concept lands before the code runs.
+- FastQC HTML is embedded via <iframe srcdoc> so it renders inside Colab,
+  plus a button opens it in a new tab as a fallback.
+"""
 import json
 
 REPO = "hanyingjhuang/ngs-sickle-tutorial"
 RAW = f"https://raw.githubusercontent.com/{REPO}/main"
 
 def md(*lines):
-    src = []
-    for i, l in enumerate(lines):
-        src.append(l + ("\n" if i < len(lines) - 1 else ""))
+    src = [l + ("\n" if i < len(lines) - 1 else "") for i, l in enumerate(lines)]
     return {"cell_type": "markdown", "metadata": {}, "source": src}
 
-def code(*lines):
-    src = []
-    for i, l in enumerate(lines):
-        src.append(l + ("\n" if i < len(lines) - 1 else ""))
-    return {"cell_type": "code", "metadata": {}, "execution_count": None, "outputs": [], "source": src}
+def code(*lines, hide=True):
+    """Code cell. Hidden source by default — Colab shows just the title /
+    output unless the student clicks to expand."""
+    src = [l + ("\n" if i < len(lines) - 1 else "") for i, l in enumerate(lines)]
+    cell = {
+        "cell_type": "code",
+        "metadata": {"jupyter": {"source_hidden": True}} if hide else {},
+        "execution_count": None,
+        "outputs": [],
+        "source": src,
+    }
+    return cell
 
 cells = []
 
@@ -24,18 +38,16 @@ cells = []
 cells.append(md(
     "# NGS pipeline — from raw reads to a clinical variant",
     "",
-    "### Teaching notebook · 生技產業研發 III (Biotech Industry R&D III)",
-    "**Taipei Medical University**  ",
-    "Author: **Han-Ying Jhuang**, PhD ",
-    "Contact: hanyingjhuang@tmu.edu.tw  ",
+    "**Author** · Han-Ying Jhuang, PhD  ",
+    "**Contact** · hanyingjhuang@tmu.edu.tw",
     "",
     "---",
     "",
     "## What this notebook teaches",
     "",
-    "By the end of this notebook you will have run, with your own hands, the entire short-read variant-calling pipeline that hospitals and research labs use every day. You will start with the unprocessed output of an Illumina sequencer (a `FASTQ` file of millions of short DNA reads) and finish by **finding the sickle cell mutation** in a real person's genome.",
+    "By the end of this notebook you will have run the entire short-read variant-calling pipeline that hospitals and research labs use every day. You will start with the unprocessed output of an Illumina sequencer (a `FASTQ` file of millions of short DNA reads) and finish by **finding the sickle cell mutation** in a real person's genome.",
     "",
-    "We use real public data: 438 sequencing reads taken from sample **HG02666**, a Gambian individual in the [1000 Genomes Project](https://www.internationalgenome.org/), confirmed in the project's official variant calls to be a heterozygous carrier of the sickle cell allele (**rs334**, *HBB* c.20A>T, p.Glu7Val). Our reference is a 4-kilobase slice of human chromosome 11 (GRCh37) covering the *HBB* gene, fetched from the UCSC Genome Browser.",
+    "We use real public data: 438 sequencing reads from sample **HG02666**, a Gambian individual in the [1000 Genomes Project](https://www.internationalgenome.org/), confirmed in the project's official VCF to be a heterozygous carrier of the sickle cell allele (**rs334**, *HBB* c.20A>T, p.Glu7Val). Our reference is a 4-kilobase slice of human chromosome 11 (GRCh37) covering the *HBB* gene, fetched from the UCSC Genome Browser.",
     "",
     "## Pipeline overview",
     "",
@@ -52,18 +64,17 @@ cells.append(md(
     "                              clinical interpretation",
     "```",
     "",
-    "## How to use this notebook",
+    "## How to use",
     "",
     "1. Click **Runtime → Run all** to run every step automatically, *or*",
     "2. Click each cell and press **Shift + Enter** to step through one at a time.",
     "",
-    "Every code cell runs *real Linux binaries* (`bwa`, `samtools`, `bcftools`, …) on a free Google cloud VM — exactly the same software you would install on a lab workstation. Nothing here is simulated.",
+    "Code is **hidden by default** so you focus on the biology. Click the small bar at the left of any code cell to reveal the commands. Every command runs *real Linux binaries* (`bwa`, `samtools`, `bcftools`, …) on a free Google cloud VM — exactly the software a lab workstation would use.",
     "",
     "## Learning objectives",
     "",
-    "After completing this notebook you will be able to:",
     "1. Read a FASTQ file and explain its 4-line structure.",
-    "2. Run quality control and adapter trimming, and tell when a dataset needs more or less of each.",
+    "2. Run quality control and adapter trimming, and tell when a dataset needs more or less.",
     "3. Explain what an aligner does and read a SAM/BAM record.",
     "4. Generate and interpret a pileup at any position in a genome.",
     "5. Call SNVs and indels with `bcftools` and read the resulting VCF.",
@@ -78,27 +89,23 @@ cells.append(md(
 cells.append(md(
     "## 0 · Setting up the environment",
     "",
-    "Colab gives us a brand-new Linux machine each time. The first thing we have to do is install the bioinformatics tools we'll need. These are exactly the same command-line programs used in every NGS lab in the world:",
+    "Colab gives us a fresh Linux machine each session. We install the bioinformatics tools with `apt-get`. These are the same command-line programs used in every NGS lab:",
     "",
-    "| tool | what it does |",
+    "| tool | role |",
     "| --- | --- |",
-    "| **`bwa`** | Burrows-Wheeler Aligner — maps short reads to a reference genome |",
-    "| **`samtools`** | sort, index, view, and pile-up BAM/SAM files |",
-    "| **`bcftools`** | call and filter variants from a pile-up |",
-    "| **`fastqc`** | classical quality-control report for FASTQ |",
-    "| **`fastp`** | fast read trimmer + QC report (a modern alternative to Trimmomatic) |",
-    "",
-    "The cell below uses `apt-get`, Ubuntu's package manager, to install all five at once."
+    "| **`bwa`** | Burrows-Wheeler Aligner — maps short reads to a reference |",
+    "| **`samtools`** | sort, index, view, pile-up BAM/SAM |",
+    "| **`bcftools`** | call and filter variants |",
+    "| **`fastqc`** | classical QC report for FASTQ |",
+    "| **`fastp`** | fast trimmer + QC report (modern alternative to Trimmomatic) |"
 ))
 
 cells.append(code(
     "%%bash",
-    "# Install all bioinformatics tools we'll need (≈30 seconds)",
     "apt-get -qq update",
     "apt-get -qq install -y bwa samtools bcftools fastqc fastp 2>&1 | tail -3",
-    "",
     "echo",
-    "echo \"Installed versions:\"",
+    "echo \"--- versions installed ---\"",
     "bwa 2>&1 | grep '^Version'",
     "samtools --version | head -1",
     "bcftools --version | head -1",
@@ -107,7 +114,7 @@ cells.append(code(
 ))
 
 cells.append(md(
-    "✅ If you see version numbers above, the tools are ready. Notice the version numbers — in real research you record these so others can reproduce your work."
+    "✅ If you see version numbers above, the tools are ready."
 ))
 
 # ===================================================================
@@ -116,34 +123,30 @@ cells.append(md(
 cells.append(md(
     "## 0b · Downloading the real data",
     "",
-    "We need two files to do anything useful:",
+    "We need two files:",
     "",
-    "1. **A reference genome** (`ref.fa` — a [FASTA](https://en.wikipedia.org/wiki/FASTA_format) file). FASTA is the simplest possible sequence format: one `>name` header line followed by the sequence on the lines below. Our reference is a small 4 kb slice of human chromosome 11 covering the **HBB gene** (β-globin), fetched from the UCSC Genome Browser.",
-    "",
-    "2. **The sequencing reads** (`reads.fq` — a [FASTQ](https://en.wikipedia.org/wiki/FASTQ_format) file). FASTQ is what comes out of an Illumina sequencer: each read is 4 lines (name, sequence, separator, quality). Our reads come from sample **HG02666** in the 1000 Genomes Project — a Gambian individual whose genome was sequenced with low-coverage Illumina chemistry.",
-    "",
-    "Both files live in the GitHub repo for this lesson. We pull them with `wget`."
+    "1. **A reference genome** (`ref.fa`) — a [FASTA](https://en.wikipedia.org/wiki/FASTA_format) file: one `>name` header followed by the sequence. Ours is a 4 kb slice of human chromosome 11 covering the *HBB* gene.",
+    "2. **The sequencing reads** (`reads.fq`) — a [FASTQ](https://en.wikipedia.org/wiki/FASTQ_format) file: 4 lines per read (name · sequence · `+` · quality). Ours: 438 real Illumina reads from sample HG02666."
 ))
 
 cells.append(code(
     "%%bash",
-    "set -e                                                  # stop on any error",
+    "set -e",
     "mkdir -p data && cd data",
-    f"curl -sLO {RAW}/data/ref.fa                            # 4 kB reference",
-    f"curl -sLO {RAW}/data/reads.fq                          # 97 kB of reads",
-    "",
-    "ls -la                                                  # confirm files arrived",
+    f"curl -sLO {RAW}/data/ref.fa",
+    f"curl -sLO {RAW}/data/reads.fq",
+    "ls -la",
     "echo",
     "echo \"--- reference ---\"",
-    "head -1 ref.fa                                          # FASTA header line",
+    "head -1 ref.fa",
     "echo \"length: $(grep -v '^>' ref.fa | tr -d '\\n' | wc -c) bp\"",
     "echo",
     "echo \"--- reads ---\"",
-    "echo \"read count: $(( $(wc -l < reads.fq) / 4 ))\"      # 4 lines per read"
+    "echo \"read count: $(( $(wc -l < reads.fq) / 4 ))\""
 ))
 
 cells.append(md(
-    "We now have a 4,000 bp reference and 438 short reads. In a real experiment the FASTQ would be 30–100 GB — millions of reads — but the pipeline is identical. Working with a small subset just makes it run in seconds instead of hours."
+    "We now have a 4,000 bp reference and 438 short reads. In a real experiment the FASTQ would be 30–100 GB; the pipeline is identical, just slower."
 ))
 
 # ===================================================================
@@ -151,30 +154,46 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 1 · What does a sequencing read actually look like?",
+    "## Step 1 · What does a sequencing read actually look like?"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import FancyBboxPatch",
+    "fig, ax = plt.subplots(figsize=(10, 2.6))",
+    "ax.set_xlim(0, 10); ax.set_ylim(0, 5); ax.axis('off')",
+    "rows = [",
+    "    (4, '@SRR582169.1324745/1', 'line 1 — read name (after \"@\")', '#57606a'),",
+    "    (3, 'TGGCTCTGCCCTGACTTTTATGCC...',   'line 2 — DNA sequence',           '#1f2328'),",
+    "    (2, '+',                              'line 3 — separator',               '#57606a'),",
+    "    (1, 'CEFEHFHHGFGHGHFJHHGFGH...',     'line 4 — Phred quality string',    '#57606a'),",
+    "]",
+    "for y, txt, role, c in rows:",
+    "    ax.text(0.3, y, txt, family='monospace', fontsize=11, color=c, va='center')",
+    "    ax.annotate(role, xy=(4.5, y), xytext=(7.0, y), fontsize=10, color='#57606a',",
+    "                va='center', arrowprops=dict(arrowstyle='->', color='#bbb', lw=0.7))",
+    "ax.add_patch(FancyBboxPatch((0.15, 0.5), 4.3, 4.0, boxstyle='round,pad=0.1',",
+    "                            ec='#d0d7de', fc='#f6f8fa', lw=0.8))",
+    "ax.set_title('FASTQ — one read = 4 lines', loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "Each FASTQ record is **exactly 4 lines** — name, sequence, `+`, and a quality string with one character per base.",
     "",
-    "Before we touch the pipeline, let's just *look* at the data. Each read in a FASTQ file is exactly **4 lines**:",
-    "",
-    "| line | content | example |",
-    "| --- | --- | --- |",
-    "| 1 | `@` + read name | `@SRR582169.1324745/1` |",
-    "| 2 | the DNA sequence (A, C, G, T, sometimes N) | `TGGCTCTGCCCT…` |",
-    "| 3 | `+` (separator) | `+` |",
-    "| 4 | the quality string — one character per base | `CEFEHFHHGFGH…` |",
-    "",
-    "The quality string is the most surprising part. Each character represents the *Phred score* — how confident the sequencer is in that base. Letters early in the alphabet mean low confidence, later letters mean high. Specifically: `Phred = ord(char) - 33`. A character of `'I'` (ASCII 73) means quality 40 (a 1 in 10,000 chance the base is wrong). A character of `'#'` (ASCII 35) means quality 2 — basically a guess.",
+    "**The quality string** is the most surprising part. Each character is the *Phred score* — how confident the sequencer is in that base. Specifically: `Phred = ord(char) − 33`. `'I'` (ASCII 73) means Q40 (1 in 10,000 chance the base is wrong). `'#'` (ASCII 35) means Q2 — basically a guess.",
     "",
     "Let's look at the first two reads:"
 ))
 
 cells.append(code(
-    "!head -8 data/reads.fq                  # first 2 reads = 8 lines"
+    "!head -8 data/reads.fq"
 ))
 
 cells.append(md(
-    "Notice the quality strings end with garbage characters like `;` and `<` and `=` — these are low-quality bases at the 3′ end of each read. This is a universal pattern in Illumina sequencing: the chemistry degrades over the length of a read, so the last 10–20 bases are noisier than the first.",
+    "Notice the quality strings end with garbage characters like `;<=` — low-quality bases at the 3′ end. This is universal in Illumina sequencing: chemistry degrades over the length of a read.",
     "",
-    "Below is a **visual** version of the same reads. Each base gets a colour (A=green, T=red, C=blue, G=yellow), and a coloured bar height-encodes the quality below it (taller = higher quality)."
+    "Below is a visual version of the first two reads. The base letter under each bar is colored by base; the bar height is the Phred score (taller = higher quality, green = Q≥30, yellow = Q20-29, orange = Q10-19, red = Q<10)."
 ))
 
 cells.append(code(
@@ -186,27 +205,28 @@ cells.append(code(
     "for r in range(2):",
     "    name, seq, _, qual = lines[r*4 : r*4 + 4]",
     "    Q = [ord(c) - 33 for c in qual]",
-    "",
-    "    fig, ax = plt.subplots(figsize=(14, 1.5))",
     "    cmap = {'A':'#1a7f37', 'T':'#b1272d', 'C':'#0969da', 'G':'#9a6700', 'N':'#777'}",
-    "    # Letter row at top",
-    "    for i, b in enumerate(seq):",
-    "        ax.text(i, 1.4, b, ha='center', va='center',",
-    "                color=cmap.get(b,'#000'), family='monospace', fontsize=9)",
-    "    # Quality bars below",
     "    bar_colors = ['#1a7f37' if q>=30 else '#9a6700' if q>=20",
     "                  else '#bf6b00' if q>=10 else '#b1272d' for q in Q]",
-    "    ax.bar(range(len(Q)), Q, color=bar_colors, width=0.9)",
+    "",
+    "    fig, ax = plt.subplots(figsize=(14, 2.0))",
+    "    ax.bar(range(len(Q)), Q, color=bar_colors, width=0.95)",
     "    ax.set_xlim(-0.5, len(seq)-0.5); ax.set_ylim(0, 42)",
-    "    ax.set_yticks([0, 20, 30, 40]); ax.set_xticks([])",
+    "    ax.set_yticks([0, 20, 30, 40])",
+    "    ax.set_xticks(range(len(seq)))",
+    "    ax.set_xticklabels(list(seq), family='monospace', fontsize=8)",
+    "    # Color each x-tick label by base",
+    "    for tick, b in zip(ax.get_xticklabels(), seq):",
+    "        tick.set_color(cmap.get(b, '#000'))",
+    "    ax.tick_params(axis='x', length=0, pad=2)   # tighten label-to-bar gap",
     "    ax.set_ylabel('Phred Q')",
     "    ax.set_title(name, fontsize=9, loc='left')",
-    "    for s in ['top','right']: ax.spines[s].set_visible(False)",
+    "    for s in ['top', 'right']: ax.spines[s].set_visible(False)",
     "    plt.tight_layout(); plt.show()"
 ))
 
 cells.append(md(
-    "👀 **Look at the right side of each plot.** The bars get shorter and turn yellow / orange / red — those are the low-quality 3′ ends. We will trim them off in Step 3."
+    "👀 Look at the right side of each plot — bars get shorter and turn yellow / orange / red. Those low-quality 3′ ends will be trimmed in Step 3."
 ))
 
 # ===================================================================
@@ -214,37 +234,79 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 2 · Quality control with FastQC",
-    "",
-    "Looking at one read tells you nothing about the *whole* dataset. **FastQC** is the standard first-pass QC tool. It reads the entire FASTQ, computes summary statistics (per-base quality, GC content, adapter contamination, sequence duplication, …), and writes an HTML report you can read in a browser.",
-    "",
-    "FastQC has been the de-facto standard since 2010. Its output is the very first thing every bioinformatician looks at when handed a new dataset."
+    "## Step 2 · Quality control with FastQC"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import Rectangle",
+    "fig, ax = plt.subplots(figsize=(10, 2.5))",
+    "ax.set_xlim(0, 10); ax.set_ylim(0, 4); ax.axis('off')",
+    "for i in range(5):",
+    "    ax.add_patch(Rectangle((0.5, 3.5 - i*0.5), 1.6, 0.35, fc='#cce5ff', ec='#0969da', lw=0.4))",
+    "ax.text(1.3, 0.6, 'all reads\\nin reads.fq', ha='center', fontsize=9, color='#57606a')",
+    "ax.annotate('', xy=(3.4, 2.2), xytext=(2.3, 2.2),",
+    "            arrowprops=dict(arrowstyle='->', color='#0a7c7e', lw=2))",
+    "ax.text(2.85, 2.5, 'FastQC', ha='center', fontsize=10, color='#0a7c7e', weight='bold')",
+    "tiles = [('per-base Q', 3.4, '✓', '#1a7f37'),",
+    "         ('GC content', 2.5, '✓', '#1a7f37'),",
+    "         ('adapter',    1.6, '⚠', '#9a6700'),",
+    "         ('duplication',0.7, '✓', '#1a7f37')]",
+    "for label, y, mark, col in tiles:",
+    "    ax.add_patch(Rectangle((4.2, y), 5.0, 0.7, fc='#f6f8fa', ec='#d0d7de', lw=0.5))",
+    "    ax.text(4.4, y+0.35, mark, fontsize=14, color=col, va='center')",
+    "    ax.text(5.0, y+0.35, label, fontsize=10, color='#1f2328', va='center')",
+    "    ax.text(8.8, y+0.35, 'pass' if mark=='✓' else 'warn', fontsize=9, color=col, va='center', ha='right')",
+    "ax.set_title('FastQC — read all FASTQs, score each metric', loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "Looking at one read tells you nothing about the *whole* dataset. **FastQC** is the standard first-pass tool. It scans the entire FASTQ and writes an HTML report scoring per-base quality, GC content, adapter contamination, sequence duplication, and more."
 ))
 
 cells.append(code(
     "%%bash",
     "mkdir -p qc",
-    "fastqc data/reads.fq -o qc 2>&1 | tail -3        # runs in seconds on small data",
-    "ls qc/                                            # what did it produce?"
+    "fastqc data/reads.fq -o qc 2>&1 | tail -3",
+    "ls qc/"
 ))
 
 cells.append(md(
-    "FastQC produced two files: a `.html` report (the human-readable one) and a `.zip` (raw data, for parsing in a script). Let's display the HTML report inline below:"
+    "FastQC produced a `.html` report. The next cell embeds it inline. If the iframe doesn't render in your browser, click the **Open FastQC report in new tab** button below it."
 ))
 
 cells.append(code(
-    "from IPython.display import IFrame",
-    "IFrame('qc/reads_fastqc.html', width='100%', height=600)"
+    "import base64, html as html_mod",
+    "from IPython.display import HTML, display",
+    "",
+    "with open('qc/reads_fastqc.html') as f:",
+    "    fastqc_html = f.read()",
+    "",
+    "# 1) Inline iframe via srcdoc (self-contained, sandboxed)",
+    "escaped = html_mod.escape(fastqc_html, quote=True)",
+    "display(HTML(",
+    "    f'<iframe srcdoc=\"{escaped}\" '",
+    "    f'style=\"width:100%;height:640px;border:1px solid #d0d7de;border-radius:6px;\"></iframe>'",
+    "))",
+    "",
+    "# 2) Open-in-new-tab button (data: URL)",
+    "b64 = base64.b64encode(fastqc_html.encode()).decode()",
+    "display(HTML(",
+    "    f'<a href=\"data:text/html;base64,{b64}\" target=\"_blank\" '",
+    "    f'style=\"display:inline-block;padding:8px 16px;background:#0a7c7e;'",
+    "    f'color:white;text-decoration:none;border-radius:5px;'",
+    "    f'font-family:sans-serif;font-size:13px;margin-top:10px;\">'",
+    "    f'📄 Open FastQC report in new tab</a>'",
+    "))"
 ))
 
 cells.append(md(
-    "**How to read this report.** Each section has a tick (✓ pass), warning (⚠), or cross (✗). Don't panic if you see warnings — many are normal for small datasets. Pay attention to:",
+    "**How to read the report.** Each section shows a tick (✓ pass), warning (⚠), or cross (✗). Don't panic at warnings — many are normal for small datasets. Pay attention to:",
     "",
-    "- **Per base sequence quality** — should stay green / above Q20. Drops at the end are normal.",
-    "- **Per base sequence content** — A/C/G/T should be ~25% each in a random region (it's *not* random for a small targeted region like ours, so warnings are expected).",
-    "- **Adapter content** — should be flat at zero. If it climbs at the read ends, you have adapter contamination and need to trim.",
-    "",
-    "*Discussion question for class:* what biases would you expect from sequencing only the HBB region (4 kb of human DNA), and why does FastQC flag some of them?"
+    "- **Per base sequence quality** — should stay green (Q≥28). Drops at the end are normal.",
+    "- **Adapter content** — should be flat at zero. If it climbs at read ends, there's adapter contamination → trim.",
+    "- **GC content** — should be roughly bell-shaped around the genome's mean. Bimodal = contamination."
 ))
 
 # ===================================================================
@@ -252,18 +314,38 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 3 · Trimming with `fastp`",
-    "",
-    "FastQC just *reports* problems — it doesn't fix them. To clean up the reads we use a separate tool. Two are widely used:",
-    "",
-    "- **Trimmomatic** (Java, classical, very configurable)",
-    "- **fastp** (C++, fast, modern, also generates its own QC report)",
-    "",
-    "We use `fastp` here because it's faster and self-documenting. Our settings:",
-    "",
-    "- `-i` / `-o` — input FASTQ, output trimmed FASTQ",
-    "- `-j` / `-h` — write a JSON and HTML report",
-    "- `--cut_tail --cut_tail_window_size 4 --cut_tail_mean_quality 20` — slide a 4-base window from the 3′ end and trim until the average quality in the window stays at Q20 or above. (Sliding-window quality trimming is the standard approach.)"
+    "## Step 3 · Trimming with `fastp`"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import Rectangle",
+    "import numpy as np",
+    "fig, ax = plt.subplots(figsize=(10, 2.6))",
+    "ax.set_xlim(-3, 70); ax.set_ylim(0, 6); ax.axis('off')",
+    "n = 50",
+    "Q = 38 - (np.linspace(0, 1, n)**1.6)*32",
+    "colors = ['#1a7f37' if q>=30 else '#9a6700' if q>=20 else '#bf6b00' if q>=10 else '#b1272d' for q in Q]",
+    "for i, c in enumerate(colors):",
+    "    ax.add_patch(Rectangle((i, 4), 0.95, 0.7, fc=c, ec='none', alpha=0.85))",
+    "ax.text(-1.5, 4.35, 'read', ha='right', fontsize=10, color='#57606a', va='center')",
+    "cut = n",
+    "for i in range(n-4, -1, -1):",
+    "    if np.mean(Q[i:i+4]) >= 20:",
+    "        cut = i+4; break",
+    "ax.plot([cut, cut], [3.7, 5.1], color='#b1272d', lw=2, ls='--')",
+    "ax.text(cut, 5.4, '✂  cut here', ha='center', fontsize=10, color='#b1272d')",
+    "for i in range(cut):",
+    "    ax.add_patch(Rectangle((i, 1.6), 0.95, 0.7, fc=colors[i], ec='none', alpha=0.85))",
+    "ax.text(-1.5, 1.95, 'kept', ha='right', fontsize=10, color='#1a7f37', va='center')",
+    "ax.text(n+1, 4.35, 'fastp slides a 4-base window\\nfrom 3′; trims when mean Q < 20',",
+    "        fontsize=9, color='#57606a', va='center')",
+    "ax.set_title('fastp — sliding-window 3′ quality trim', loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "FastQC just *reports* problems — it doesn't fix them. **fastp** trims adapters, slides a 4-base window from the 3′ end, and cuts when the window's mean quality drops below Q20."
 ))
 
 cells.append(code(
@@ -273,17 +355,11 @@ cells.append(code(
     "  -o data/trimmed.fq \\",
     "  -j data/qc.json -h data/qc.html \\",
     "  --cut_tail --cut_tail_window_size 4 --cut_tail_mean_quality 20 \\",
-    "  2>&1 | tail -25                       # show the last lines of fastp's log"
+    "  2>&1 | tail -20"
 ))
 
 cells.append(md(
-    "Read the log carefully — it tells you exactly what fastp did:",
-    "",
-    "- *reads passed filter* / *reads failed*: how many reads survived",
-    "- *Q20 / Q30 rate*: percentage of high-quality bases, before vs after",
-    "- *adapter trimming*: was any adapter found and removed?",
-    "",
-    "Now let's plot the per-base quality before and after trimming, using the JSON fastp wrote:"
+    "Now plot the per-base mean quality before and after, from the JSON report fastp wrote:"
 ))
 
 cells.append(code(
@@ -293,19 +369,17 @@ cells.append(code(
     "after  = qc['read1_after_filtering']['quality_curves']['mean']",
     "",
     "fig, ax = plt.subplots(figsize=(10, 3.5))",
-    "# coloured quality bands as the backdrop",
-    "ax.axhspan(28, 40, color='#1a7f37', alpha=0.07, label='_high')",
-    "ax.axhspan(20, 28, color='#9a6700', alpha=0.10, label='_med')",
-    "ax.axhspan(0,  20, color='#b1272d', alpha=0.07, label='_low')",
+    "ax.axhspan(28, 40, color='#1a7f37', alpha=0.07)",
+    "ax.axhspan(20, 28, color='#9a6700', alpha=0.10)",
+    "ax.axhspan(0,  20, color='#b1272d', alpha=0.07)",
     "ax.plot(before, '--', color='#b1272d', lw=1.6, label='before trim')",
     "ax.plot(after,  '-',  color='#1a7f37', lw=1.6, label='after trim')",
     "ax.set_xlabel('position along read'); ax.set_ylabel('mean Phred Q')",
     "ax.set_ylim(0, 41); ax.legend(loc='lower left', frameon=False)",
     "for s in ['top','right']: ax.spines[s].set_visible(False)",
-    "ax.set_title('Per-base mean quality — before vs. after fastp')",
+    "ax.set_title('Per-base mean quality')",
     "plt.tight_layout(); plt.show()",
     "",
-    "# Print a side-by-side stats table",
     "b, a = qc['summary']['before_filtering'], qc['summary']['after_filtering']",
     "print(f\"{'metric':<12} {'before':>14} {'after':>14}\")",
     "print('-' * 42)",
@@ -316,7 +390,7 @@ cells.append(code(
 ))
 
 cells.append(md(
-    "📈 The **green line (after) sits above the red dashed line (before)** at the 3′ end — that's the trimming working. We've thrown away noisy bases. The total number of bases drops, but the *quality* of what remains is higher. Q30 rate climbing means fewer low-quality bases pollute downstream steps."
+    "📈 The green line (after) sits above the red dashed line (before) at the 3′ end — that's the trim. Total bases drop, but the *quality* of what remains is higher."
 ))
 
 # ===================================================================
@@ -324,51 +398,70 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 4 · Alignment with BWA-MEM",
+    "## Step 4 · Alignment with BWA-MEM"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import Rectangle",
+    "import numpy as np",
+    "fig, ax = plt.subplots(figsize=(10, 3.5))",
+    "ax.set_xlim(0, 70); ax.set_ylim(0, 8); ax.axis('off')",
+    "ax.add_patch(Rectangle((2, 5.7), 56, 0.8, fc='#e2e6ea', ec='#57606a', lw=0.5))",
+    "ax.text(1.5, 6.1, 'REF', ha='right', fontsize=10, color='#57606a')",
+    "ax.text(30, 7.0, 'reference (chr11 — HBB region)', ha='center', fontsize=9, color='#57606a')",
+    "np.random.seed(2)",
+    "n_reads = 8",
+    "starts = sorted(np.random.choice(range(2, 50), n_reads, replace=False))",
+    "lanes = [0,1,0,1,0,1,0,1]",
+    "for s, lane in zip(starts, lanes):",
+    "    ax.add_patch(Rectangle((s, 4.6 - lane*0.7), 8, 0.55, fc='#cce5ff', ec='#0969da', lw=0.4))",
+    "ax.annotate('', xy=(30, 5.5), xytext=(30, 4.8),",
+    "            arrowprops=dict(arrowstyle='->', color='#0a7c7e', lw=2))",
+    "ax.text(34, 5.0, 'BWA-MEM', fontsize=10, color='#0a7c7e', weight='bold')",
+    "for s, lane in zip(starts, lanes):",
+    "    ax.add_patch(Rectangle((s, 2.3 - lane*0.7), 8, 0.55, fc='#cce5ff', ec='#0969da', lw=0.4))",
+    "ax.text(1.5, 2.5, 'reads', ha='right', fontsize=10, color='#57606a')",
+    "ax.add_patch(Rectangle((starts[2]+5, 2.3 - lanes[2]*0.7), 0.7, 0.55, fc='#b1272d', ec='none'))",
+    "ax.text(60, 1.7, '◀ a mismatch (potential variant)', fontsize=9, color='#b1272d', va='center')",
+    "ax.set_title('BWA-MEM — for every read, find best position on REF',",
+    "             loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "Each read is a short anonymous string. **Alignment** finds where on the reference it came from.",
     "",
-    "Each read is a short, anonymous string of A/C/G/T. We don't yet know *where* in the genome it came from. **Alignment** answers that question: for every read, find its best-matching position on the reference.",
+    "**BWA-MEM** is the workhorse aligner for short reads (Burrows-Wheeler Aligner, MEM = Maximal Exact Match). Used by 1000 Genomes, GATK, and most clinical labs.",
     "",
-    "**BWA-MEM** is the workhorse aligner for short reads (Burrows-Wheeler Aligner, MEM = Maximal Exact Match algorithm, published by Heng Li in 2009 and updated since). It's used by the 1000 Genomes Project, GATK, and most clinical labs. The MEM algorithm anchors each read on a long stretch that matches the reference exactly, then extends through any mismatches and small indels.",
-    "",
-    "Two commands:",
-    "",
-    "1. **`bwa index ref.fa`** — build a Burrows-Wheeler search index of the reference. Run once per reference, takes seconds for our 4 kb (would take ~1 hour for the whole human genome).",
-    "2. **`bwa mem ref.fa trimmed.fq > aligned.sam`** — align reads to the indexed reference. Output is **SAM** (Sequence Alignment/Map) format."
+    "Two commands: `bwa index` builds a search index of the reference (run once); `bwa mem` aligns reads."
 ))
 
 cells.append(code(
     "%%bash",
-    "# Build the index — outputs ref.fa.amb, .ann, .bwt, .pac, .sa",
     "bwa index data/ref.fa 2>&1 | tail -3",
-    "",
-    "# Align — write SAM to file, route bwa's progress log to a separate file",
     "bwa mem -t 2 data/ref.fa data/trimmed.fq 2> data/bwa.log > data/aligned.sam",
-    "",
     "echo",
     "echo '--- bwa log (last lines) ---'",
     "tail -8 data/bwa.log",
-    "",
     "echo",
     "echo '--- aligned.sam first 4 lines ---'",
     "head -4 data/aligned.sam | cut -c1-180"
 ))
 
 cells.append(md(
-    "**The SAM format**, briefly. Every line that does *not* start with `@` is one read alignment, with these tab-separated columns:",
+    "**SAM format**: lines starting with `@` are headers; the rest are alignments. Every alignment row has these tab-separated columns:",
     "",
     "| col | name | meaning |",
     "| --- | --- | --- |",
     "| 1 | QNAME | read name |",
-    "| 2 | FLAG  | bit flags (mapped? reverse strand? secondary?) |",
-    "| 3 | RNAME | reference sequence the read mapped to |",
-    "| 4 | POS   | 1-based leftmost position on the reference |",
-    "| 5 | MAPQ  | mapping quality (0-60, higher = more confident) |",
-    "| 6 | CIGAR | match/mismatch/indel pattern (e.g. `100M` = 100 matches) |",
-    "| 9 | TLEN  | template length (insert size for paired reads) |",
+    "| 2 | FLAG  | bit flags (mapped? reverse strand?) |",
+    "| 3 | RNAME | reference contig |",
+    "| 4 | POS   | leftmost mapping position (1-based) |",
+    "| 5 | MAPQ  | mapping quality (0–60, higher = more confident) |",
+    "| 6 | CIGAR | match/mismatch/indel pattern, e.g. `100M` |",
     "| 10| SEQ   | the read sequence |",
-    "| 11| QUAL  | the read quality string |",
-    "",
-    "Lines starting with `@` are headers — `@SQ` describes each reference contig, `@PG` records the program that wrote the file. (Provenance!)"
+    "| 11| QUAL  | the read quality string |"
 ))
 
 # ===================================================================
@@ -376,46 +469,55 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 5 · Sort and index the alignments",
-    "",
-    "BWA outputs reads in the order it processed them — essentially random along the genome. Every downstream tool (variant callers, browsers, depth calculators) expects reads to be sorted by chromosome and position. We also need an *index* so tools can jump to any genomic region without scanning the whole file.",
-    "",
-    "Three commands:",
-    "",
-    "1. **`samtools sort`** — sorts SAM by reference position, outputs compressed binary BAM",
-    "2. **`samtools index`** — builds a BAM index (`.bai`) for random access",
-    "3. **`samtools flagstat`** — quick alignment statistics"
+    "## Step 5 · Sort and index the alignments"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import Rectangle",
+    "import numpy as np",
+    "fig, ax = plt.subplots(figsize=(10, 2.7))",
+    "ax.set_xlim(-2, 60); ax.set_ylim(0, 5); ax.axis('off')",
+    "np.random.seed(7)",
+    "starts_random = np.random.choice(range(2, 48), 8, replace=False)",
+    "starts_sorted = sorted(starts_random)",
+    "ax.text(-1.5, 4.0, 'unsorted SAM', fontsize=10, color='#57606a')",
+    "for i, s in enumerate(starts_random):",
+    "    ax.add_patch(Rectangle((s, 3.5 - (i%4)*0.25), 5, 0.18, fc='#cce5ff', ec='#0969da', lw=0.4))",
+    "ax.annotate('', xy=(30, 2.4), xytext=(30, 3.1),",
+    "            arrowprops=dict(arrowstyle='->', color='#0a7c7e', lw=2))",
+    "ax.text(33, 2.7, 'samtools sort + index', fontsize=10, color='#0a7c7e', weight='bold')",
+    "ax.text(-1.5, 1.8, 'sorted BAM (+ .bai)', fontsize=10, color='#57606a')",
+    "for i, s in enumerate(starts_sorted):",
+    "    ax.add_patch(Rectangle((s, 1.3 - (i%4)*0.25), 5, 0.18, fc='#cce5ff', ec='#0969da', lw=0.4))",
+    "ax.set_title('Sort reads by position so callers can stream through quickly',",
+    "             loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "BWA outputs reads in random order. Variant callers, browsers, and depth tools all expect them sorted by position. We also need an index for random access into any region of the genome."
 ))
 
 cells.append(code(
     "%%bash",
     "samtools sort  data/aligned.sam -o data/aligned.bam",
     "samtools index data/aligned.bam",
-    "",
-    "echo '--- flagstat output ---'",
+    "echo '--- flagstat ---'",
     "samtools flagstat data/aligned.bam"
 ))
 
 cells.append(md(
-    "**Reading flagstat:**",
-    "",
-    "- *in total* — total reads (including unmapped)",
-    "- *mapped* — reads BWA placed somewhere on the reference. Should be ≥95% in a clean run.",
-    "- *paired in sequencing* — for paired-end. Our data is single-end so this is 0.",
-    "- *duplicates* — PCR duplicates flagged by `MarkDuplicates`. We haven't run that step.",
-    "",
-    "Now the satisfying visualization: **per-position depth across the reference**. Every position gets one bar — the number of reads covering it. A red dashed line marks the rs334 (sickle cell) site so you can see the data we're going to call variants from."
+    "Coverage across the reference, with rs334 (sickle site) marked:"
 ))
 
 cells.append(code(
     "import subprocess, matplotlib.pyplot as plt",
-    "",
     "raw = subprocess.check_output(['samtools', 'depth', '-a', 'data/aligned.bam'], text=True)",
     "rows = [l.split('\\t') for l in raw.strip().split('\\n') if l]",
     "pos = [int(r[1]) for r in rows]",
     "dep = [int(r[2]) for r in rows]",
-    "RS334 = 5248232 - 5246000          # in our subset's 1-based coords this is 2232",
-    "",
+    "RS334 = 5248232 - 5246000",
     "fig, ax = plt.subplots(figsize=(11, 3))",
     "ax.fill_between(pos, dep, color='#0a7c7e', alpha=0.4)",
     "ax.plot(pos, dep, color='#0a7c7e', lw=0.9)",
@@ -424,16 +526,14 @@ cells.append(code(
     "ax.set_ylabel('read depth')",
     "ax.legend(loc='upper right', frameon=False)",
     "for s in ['top','right']: ax.spines[s].set_visible(False)",
-    "ax.set_title('Coverage across the HBB region')",
+    "ax.set_title('Coverage across HBB')",
     "plt.tight_layout(); plt.show()",
-    "",
     "print(f'mean depth: {sum(dep)/len(dep):.1f}x')",
-    "print(f'positions with ≥1 read: {sum(1 for d in dep if d):,} / {len(dep):,}')",
-    "print(f'positions with 0 reads: {sum(1 for d in dep if d==0):,}')"
+    "print(f'positions with ≥1 read: {sum(1 for d in dep if d):,} / {len(dep):,}')"
 ))
 
 cells.append(md(
-    "📊 The coverage is uneven because this is *low-coverage* data (the 1000 Genomes phase 1 strategy: many people, lightly sequenced). High-coverage clinical sequencing would give you a flatter ~30× curve. **Average ~3-5×** is enough to call common variants on a heterozygote — barely. For homozygous calls you ideally want ≥10×."
+    "📊 Coverage is uneven because this is *low-coverage* sequencing (the 1000 Genomes phase-1 design: many people, lightly sequenced). Average ~3–5× is barely enough for heterozygous calls."
 ))
 
 # ===================================================================
@@ -441,29 +541,45 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 6 · Pile up reads at every position",
+    "## Step 6 · Pile up reads at every position"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import Rectangle",
+    "fig, ax = plt.subplots(figsize=(10, 3.6))",
+    "ax.set_xlim(-1, 13); ax.set_ylim(0, 7); ax.axis('off')",
+    "REF = 'TCTCCTTAGAGT'",
+    "cmap = {'A':'#1a7f37', 'T':'#b1272d', 'C':'#0969da', 'G':'#9a6700', '·':'#aaa'}",
+    "for i, b in enumerate(REF):",
+    "    ax.add_patch(Rectangle((i, 5.7), 0.92, 0.7, fc='#e2e6ea', ec='#d0d7de', lw=0.4))",
+    "    ax.text(i+0.46, 6.05, b, ha='center', va='center', family='monospace', fontsize=11, color=cmap[b])",
+    "ax.text(-0.5, 6.05, 'REF', ha='right', va='center', fontsize=10, color='#57606a')",
+    "stack = ['·····A···   ', '·····T···   ', '·····A···   ', '·····A···   ', '·····T···   ']",
+    "for k, row in enumerate(stack):",
+    "    for i, b in enumerate(row):",
+    "        if b == ' ': continue",
+    "        is_match = b == '·'",
+    "        ax.add_patch(Rectangle((i, 4.6-k*0.6), 0.92, 0.55,",
+    "                               fc=cmap.get(b,'#aaa') if not is_match else '#f6f8fa',",
+    "                               ec='#d0d7de', lw=0.3))",
+    "        if not is_match:",
+    "            ax.text(i+0.46, 4.6-k*0.6+0.27, b, ha='center', va='center', family='monospace',",
+    "                    fontsize=11, color='white', weight='bold')",
+    "ax.text(-0.5, 4.0, 'reads', ha='right', va='center', fontsize=10, color='#57606a')",
+    "ax.add_patch(Rectangle((4.96, 1.4), 1, 5.2, fill=False, ec='#b1272d', lw=1.4, ls='--'))",
+    "ax.text(5.46, 0.9, 'mixed bases here = variant', ha='center', fontsize=9, color='#b1272d')",
+    "ax.set_title('mpileup — column-wise view of every reference position',",
+    "             loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "We *transpose* the data. Instead of looking at reads, we look at the genome **column by column**: at each reference position, what bases do the reads observe?",
     "",
-    "Now we *transpose* the data. Instead of looking at reads, we look at the genome **column by column**: at each reference position, what bases do the reads observe?",
+    "Output format (tab-separated): **contig · position · REF · depth · read bases · read qualities**.",
     "",
-    "This is what `samtools mpileup` produces. The output looks like:",
-    "",
-    "```",
-    "HBB    2232    T    7    a.aAA.,    DCEHHE,",
-    "```",
-    "",
-    "tab-separated columns: contig, position, **REF base**, depth, **read bases**, **read qualities**.",
-    "",
-    "The *read bases* string uses a special encoding:",
-    "",
-    "- `.` = match REF on the **forward** strand",
-    "- `,` = match REF on the **reverse** strand",
-    "- `A C G T` = mismatch on the forward strand",
-    "- `a c g t` = mismatch on the reverse strand",
-    "- `^]` = start of a read (followed by mapping quality char)",
-    "- `$` = end of a read",
-    "- `+N…` / `-N…` = insertion / deletion",
-    "",
-    "So the example above means: at HBB position 2232, the reference is T, depth is 7. The read bases are `a.aAA.,` — three reads see `A` (in different orientations), four reads see the reference T. **That's a heterozygous variant.**"
+    "The read-bases string uses a special encoding: `.` = match REF on forward strand · `,` = match REF on reverse strand · `A C G T` = mismatch (forward) · `a c g t` = mismatch (reverse) · `^]` = read start · `$` = read end · `+N…` / `-N…` = insertion / deletion."
 ))
 
 cells.append(code(
@@ -471,35 +587,33 @@ cells.append(code(
     "samtools mpileup -f data/ref.fa data/aligned.bam 2>/dev/null > data/pileup.txt",
     "echo \"total pileup rows: $(wc -l < data/pileup.txt)\"",
     "echo",
-    "echo '--- the rows around the sickle position (HBB:2232) ---'",
+    "echo '--- rows around the sickle position (HBB:2232) ---'",
     "awk '$2 >= 2228 && $2 <= 2236' data/pileup.txt"
 ))
 
 cells.append(md(
-    "**Look at line 2232.** Compare the read-base string to the rules above. How many reads see `A` vs `T`? Is this clearly a variant or noise?",
+    "**Look at line 2232.** How many reads see `A` vs `T`? That's the variant we're looking for.",
     "",
-    "Below is a **visual pileup** — each column is one reference position, each row in the stack is one read. Bases matching REF are faded, mismatches are highlighted. The red dashed box marks the sickle site."
+    "Below — visual pileup. Each column is one reference position; each row of the stack is one read. Bases matching REF are faded; mismatches are highlighted. Red dashed box = sickle site."
 ))
 
 cells.append(code(
     "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle",
-    "",
     "rows = []",
     "with open('data/pileup.txt') as f:",
     "    for line in f:",
     "        c, p, ref, dp, bases, qual = line.rstrip().split('\\t')",
-    "        if 2218 <= int(p) <= 2246:           # window around the sickle site",
+    "        if 2218 <= int(p) <= 2246:",
     "            rows.append((int(p), ref.upper(), int(dp), bases))",
     "",
     "def parse_bases(refb, s):",
-    "    \"\"\"Convert mpileup base string to one base per supporting read.\"\"\"",
     "    out, i = [], 0",
     "    while i < len(s):",
     "        ch = s[i]",
-    "        if   ch == '^':              i += 2;  continue   # skip mapq char",
+    "        if   ch == '^':              i += 2;  continue",
     "        elif ch == '$':              i += 1;  continue",
-    "        elif ch in '+-':             # insertion/deletion: skip the bases",
+    "        elif ch in '+-':",
     "            j = i + 1",
     "            while j < len(s) and s[j].isdigit(): j += 1",
     "            n = int(s[i+1:j]); i = j + n; continue",
@@ -511,13 +625,10 @@ cells.append(code(
     "",
     "cmap = {'A':'#1a7f37','T':'#b1272d','C':'#0969da','G':'#9a6700','N':'#777','-':'#777'}",
     "max_stack = max(r[2] for r in rows)",
-    "",
     "fig, ax = plt.subplots(figsize=(13, max_stack*0.22 + 1.5))",
     "for i, (p, ref, dp, bases) in enumerate(rows):",
-    "    # REF letter on top",
     "    ax.text(i, max_stack+1, ref, ha='center', va='center',",
     "            color=cmap[ref], family='monospace', fontsize=11, weight='bold')",
-    "    # stack of read bases",
     "    for k, b in enumerate(parse_bases(ref, bases)):",
     "        match = (b == ref)",
     "        ax.add_patch(Rectangle((i-0.4, max_stack-1-k), 0.8, 0.85,",
@@ -525,26 +636,21 @@ cells.append(code(
     "        if not match:",
     "            ax.text(i, max_stack-1-k+0.42, b, ha='center', va='center',",
     "                    color='white', family='monospace', fontsize=8)",
-    "",
-    "# Highlight the sickle column",
     "if any(p == 2232 for p, *_ in rows):",
     "    RS = next(i for i,(p,*_) in enumerate(rows) if p == 2232)",
     "    ax.add_patch(Rectangle((RS-0.5, -0.5), 1, max_stack+2.2,",
     "                           fill=False, ec='#b1272d', lw=1.5, ls='--'))",
-    "",
     "ax.set_xticks(range(len(rows)))",
     "ax.set_xticklabels([str(r[0]) for r in rows], rotation=90, fontsize=8)",
     "ax.set_yticks([]); ax.set_xlim(-1, len(rows)); ax.set_ylim(-1, max_stack+2.5)",
     "ax.set_title('Pileup window — REF row at top, reads stacked below; '",
-    "             + 'red box = rs334 (sickle position)', fontsize=10)",
+    "             + 'red box = rs334', fontsize=10)",
     "for s in ax.spines.values(): s.set_visible(False)",
     "plt.tight_layout(); plt.show()"
 ))
 
 cells.append(md(
-    "🔴 **Inside the red box**, at HBB position 2232, you should see a column where roughly half the reads show **`A`** (red) instead of the REF **T**. That's a classic heterozygous SNV — and it's the sickle cell mutation.",
-    "",
-    "*Eye-balling pileups is exactly how variant callers work, just systematically.*"
+    "🔴 At HBB:2232 (red box), roughly half the reads show **A** instead of REF **T** — a classic heterozygous SNV."
 ))
 
 # ===================================================================
@@ -552,44 +658,61 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 7 · Calling variants → VCF",
+    "## Step 7 · Calling variants → VCF"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import Rectangle, FancyBboxPatch",
+    "fig, ax = plt.subplots(figsize=(10, 3.0))",
+    "ax.set_xlim(0, 14); ax.set_ylim(0, 6); ax.axis('off')",
+    "ax.add_patch(Rectangle((1, 4.6), 0.7, 0.6, fc='#e2e6ea', ec='#d0d7de'))",
+    "ax.text(1.35, 4.9, 'T', ha='center', va='center', family='monospace', fontsize=12, color='#b1272d', weight='bold')",
+    "ax.text(0.6, 4.9, 'REF', ha='right', va='center', fontsize=9, color='#57606a')",
+    "stack = ['T','A','T','A','A']",
+    "cmap = {'A':'#1a7f37','T':'#b1272d'}",
+    "for k, b in enumerate(stack):",
+    "    ax.add_patch(Rectangle((1, 3.8 - k*0.55), 0.7, 0.5,",
+    "                           fc=cmap[b] if b!='T' else '#f6f8fa', ec='#d0d7de', lw=0.3))",
+    "    if b != 'T':",
+    "        ax.text(1.35, 3.8-k*0.55+0.25, b, ha='center', va='center', family='monospace', color='white', weight='bold')",
+    "    else:",
+    "        ax.text(1.35, 3.8-k*0.55+0.25, '·', ha='center', va='center', family='monospace', color='#aaa')",
+    "ax.text(1.35, 0.6, 'pileup column\\nat HBB:2232', ha='center', fontsize=9, color='#57606a')",
+    "ax.annotate('', xy=(5.5, 3.5), xytext=(2.6, 3.5),",
+    "            arrowprops=dict(arrowstyle='->', color='#0a7c7e', lw=2))",
+    "ax.text(4.05, 3.9, 'bcftools', ha='center', fontsize=10, color='#0a7c7e', weight='bold')",
+    "ax.add_patch(FancyBboxPatch((6.0, 2.6), 7.5, 1.7, boxstyle='round,pad=0.1',",
+    "                            fc='#f6f8fa', ec='#d0d7de'))",
+    "ax.text(6.3, 3.85, 'CHROM  POS    REF  ALT  QUAL  GT', family='monospace', fontsize=9, color='#57606a')",
+    "ax.text(6.3, 3.30, 'HBB    2232   T    A    105   0/1', family='monospace', fontsize=11, color='#1f2328')",
+    "ax.text(9.75, 0.6, 'one row of variants.vcf', ha='center', fontsize=9, color='#57606a')",
+    "ax.set_title('bcftools — pileup likelihoods → variant calls (VCF)',",
+    "             loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "We've seen the variant by eye. Now let `bcftools` call it formally. Two steps:",
     "",
-    "We've seen *by eye* that there's a variant at HBB:2232. Now let's have a real variant caller find it for us.",
+    "1. `bcftools mpileup` — base likelihoods at every position (BCF format)",
+    "2. `bcftools call -mv` — call variant sites only",
     "",
-    "**`bcftools`** does this in two steps:",
-    "",
-    "1. `bcftools mpileup` — build a BCF (binary VCF) of base likelihoods at every position",
-    "2. `bcftools call -mv` — call variants from the likelihoods. `-m` is the multiallelic caller, `-v` means only output positions that are variant.",
-    "",
-    "The output is a **VCF** (Variant Call Format) file — the universal format for variants. Every line after the header is one variant: chrom, position, REF, ALT, quality, filter, info fields, and per-sample genotype."
+    "The output is a **VCF** (Variant Call Format) — the universal variant file."
 ))
 
 cells.append(code(
     "%%bash",
-    "# Step 7a: pile up base likelihoods → BCF",
     "bcftools mpileup -f data/ref.fa data/aligned.bam -Ou -o data/pile.bcf 2>&1 | tail -2",
-    "",
-    "# Step 7b: call variants from the likelihoods → compressed VCF",
     "bcftools call -mv -Oz -o data/variants.vcf.gz data/pile.bcf 2>&1 | tail -2",
     "bcftools index -f data/variants.vcf.gz",
-    "",
     "echo",
-    "echo '--- variants.vcf.gz (skipping ## meta lines) ---'",
+    "echo '--- variants.vcf.gz (## meta lines hidden) ---'",
     "bcftools view data/variants.vcf.gz 2>/dev/null | grep -v '^##' | head -25"
 ))
 
 cells.append(md(
-    "**The VCF header** (line starting with `#CHROM`) names the columns; **each line below** is one variant call.",
-    "",
-    "Key fields:",
-    "- **POS** — 1-based position",
-    "- **REF / ALT** — reference and alternate alleles",
-    "- **QUAL** — Phred-scaled call confidence (higher = better)",
-    "- **INFO** — `key=value` pairs: `DP` = depth, `MQ` = mean mapping quality, `DP4` = ref-fwd, ref-rev, alt-fwd, alt-rev counts",
-    "- **FORMAT** — defines per-sample fields below",
-    "- **last column** — per-sample data: `GT` = genotype (`0/0`, `0/1`, `1/1`), `AD` = allele depths",
-    "",
-    "*Practice question for class:* find a homozygous variant call (genotype `1/1`) in the table above. Why does its INFO field show `DP4=0,0,…` for the reference alleles?"
+    "Each non-header line is one variant. Key fields: **POS** (1-based), **REF/ALT**, **QUAL**, **INFO** (`DP` = depth, `MQ` = mean MAPQ, `DP4` = ref-fwd, ref-rev, alt-fwd, alt-rev), **FORMAT** + per-sample (`GT` = `0/0`/`0/1`/`1/1`)."
 ))
 
 # ===================================================================
@@ -597,38 +720,70 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## Step 8 · Interpreting the variant — finding sickle cell",
+    "## Step 8 · Interpreting the variant — finding sickle cell"
+))
+
+cells.append(code(
+    "import matplotlib.pyplot as plt",
+    "from matplotlib.patches import Rectangle, FancyBboxPatch",
+    "fig, ax = plt.subplots(figsize=(11, 3.6))",
+    "ax.set_xlim(0, 14); ax.set_ylim(0, 7); ax.axis('off')",
+    "cmap = {'A':'#1a7f37','T':'#b1272d','C':'#0969da','G':'#9a6700'}",
+    "ax.text(0.3, 5.7, 'REF cDNA codon 7:', fontsize=10, color='#57606a')",
+    "for i, b in enumerate('GAG'):",
+    "    ax.add_patch(Rectangle((4 + i*0.7, 5.4), 0.65, 0.7, fc=cmap[b], alpha=0.2, ec=cmap[b]))",
+    "    ax.text(4 + i*0.7 + 0.32, 5.75, b, ha='center', va='center', family='monospace', fontsize=12, color=cmap[b], weight='bold')",
+    "ax.annotate('', xy=(7.5, 5.75), xytext=(6.4, 5.75), arrowprops=dict(arrowstyle='->', color='#57606a'))",
+    "ax.add_patch(FancyBboxPatch((7.7, 5.4), 2.4, 0.7, boxstyle='round,pad=0.05', fc='#f6f8fa', ec='#d0d7de'))",
+    "ax.text(8.9, 5.75, 'Glu (E)', ha='center', va='center', fontsize=11, color='#1f2328')",
+    "ax.text(11.0, 5.75, 'normal β-globin', va='center', fontsize=10, color='#57606a')",
+    "ax.annotate('', xy=(8.0, 4.0), xytext=(8.0, 5.2), arrowprops=dict(arrowstyle='->', color='#b1272d', lw=2))",
+    "ax.text(8.3, 4.6, 'rs334 — single base A→T (cDNA)', fontsize=9, color='#b1272d')",
+    "ax.text(0.3, 3.3, 'ALT cDNA codon 7:', fontsize=10, color='#57606a')",
+    "for i, b in enumerate('GTG'):",
+    "    fc = '#b1272d' if i == 1 else cmap[b]",
+    "    alpha = 0.5 if i == 1 else 0.2",
+    "    ax.add_patch(Rectangle((4 + i*0.7, 3.0), 0.65, 0.7, fc=fc, alpha=alpha, ec=cmap[b]))",
+    "    ax.text(4 + i*0.7 + 0.32, 3.35, b, ha='center', va='center', family='monospace', fontsize=12, color=cmap[b], weight='bold')",
+    "ax.annotate('', xy=(7.5, 3.35), xytext=(6.4, 3.35), arrowprops=dict(arrowstyle='->', color='#57606a'))",
+    "ax.add_patch(FancyBboxPatch((7.7, 3.0), 2.4, 0.7, boxstyle='round,pad=0.05', fc='#f6f8fa', ec='#b1272d', lw=1.5))",
+    "ax.text(8.9, 3.35, 'Val (V)', ha='center', va='center', fontsize=11, color='#b1272d', weight='bold')",
+    "ax.text(11.0, 3.35, 'HbS β-globin', va='center', fontsize=10, color='#b1272d')",
+    "ax.add_patch(FancyBboxPatch((0.3, 0.4), 13.4, 1.7, boxstyle='round,pad=0.05',",
+    "                            fc='#fff5f5', ec='#b1272d', lw=1.0))",
+    "ax.text(0.7, 1.55, '🩸 Phenotype:', fontsize=11, color='#b1272d', weight='bold')",
+    "ax.text(0.7, 1.05,",
+    "        'het (HbAS) → sickle cell trait (carrier, malaria-protective)   ·   '",
+    "        'hom (HbSS) → sickle cell anaemia',",
+    "        fontsize=10, color='#1f2328')",
+    "ax.set_title('rs334 — the molecular basis of sickle cell disease', loc='left', color='#57606a', fontsize=11)",
+    "plt.tight_layout(); plt.show()"
+))
+
+cells.append(md(
+    "We started with raw FASTQ and ended with a VCF. **Now the biology.**",
     "",
-    "We started with raw FASTQ and ended with a list of variants. **Now comes the biology.**",
-    "",
-    "We're specifically looking for **rs334** — the variant that causes sickle cell anaemia. Background:",
-    "",
-    "- **Position**: chromosome 11, base 5,248,232 (GRCh37 coordinates)",
-    "- **In our reference subset** (which starts at 5,246,001), this is HBB position 2,232",
-    "- **The change**: the reference T → A on the genomic forward strand",
-    "- **The biology**: HBB is on the *reverse* strand of chr11, so on the gene's coding sequence (the cDNA) this is the reverse complement: A → T. In standard HGVS notation we write **`HBB:c.20A>T`**.",
-    "- **The protein**: c.20 falls inside codon 7 (`GAG`, glutamic acid). The mutation changes it to `GTG` (valine). HGVS protein notation: **`p.Glu7Val`**.",
-    "- **The phenotype**: substituting a polar Glu with a hydrophobic Val on the β-globin surface lets HbS molecules polymerize when oxygen is low. Red blood cells deform into the characteristic sickle shape. Heterozygotes have *sickle cell trait* (HbAS, usually asymptomatic, malaria-protective). Homozygotes have *sickle cell disease* (HbSS, chronic anaemia + vaso-occlusive crises).",
-    "",
-    "Let's pull rs334 out of our VCF programmatically and translate it:"
+    "We're looking for **rs334**:",
+    "- chr11:5,248,232 (GRCh37) → in our subset, HBB:2,232",
+    "- T → A on the genomic forward strand. *HBB* is on the reverse strand, so on the cDNA: A → T (HGVS `c.20A>T`)",
+    "- That falls in codon 7 (`GAG`, glutamic acid). The mutation makes it `GTG` (valine). HGVS protein: `p.Glu7Val`",
+    "- Polar Glu → hydrophobic Val on the β-globin surface lets HbS polymerize when oxygen is low; red blood cells deform into the characteristic sickle shape",
+    "- Heterozygotes have **sickle cell trait** (HbAS, usually asymptomatic, malaria-protective). Homozygotes have **sickle cell anaemia** (HbSS)"
 ))
 
 cells.append(code(
     "import subprocess",
-    "",
     "vcf = subprocess.check_output(['bcftools', 'view', 'data/variants.vcf.gz'], text=True)",
     "rows = [l.split('\\t') for l in vcf.splitlines() if l and not l.startswith('#')]",
     "rs334 = next((r for r in rows if int(r[1]) == 2232), None)",
     "",
     "if rs334 is None:",
-    "    print('rs334 was not called in this run — try re-running, or '",
-    "          + 'check coverage at this position.')",
+    "    print('rs334 was not called in this run — check coverage at HBB:2232.')",
     "else:",
     "    fmt  = dict(zip(rs334[8].split(':'), rs334[9].split(':')))",
     "    info = dict(kv.split('=', 1) for kv in rs334[7].split(';') if '=' in kv)",
     "    dp   = info.get('DP', '?')",
     "    ad   = fmt.get('AD', '?,?').split(',')",
-    "",
     "    print('=' * 64)",
     "    print('  rs334 (sickle cell allele) called from real HG02666 reads')",
     "    print('=' * 64)",
@@ -636,8 +791,7 @@ cells.append(code(
     "    print(f'  REF -> ALT  {rs334[3]} -> {rs334[4]}      (genomic forward strand)')",
     "    print( '  cDNA        c.20 A>T   (HBB on reverse strand; revcomp of T>A)')",
     "    print( '  protein     codon 7  GAG (Glu) -> GTG (Val)  =  p.Glu7Val')",
-    "    print(f'  genotype    {fmt[\"GT\"]}     '",
-    "          + '(0/1 = heterozygous = sickle cell trait, HbAS)')",
+    "    print(f'  genotype    {fmt[\"GT\"]}     (0/1 = heterozygous = sickle cell trait, HbAS)')",
     "    print(f'  depth       {dp}    (REF reads = {ad[0]}, ALT reads = {ad[1]})')",
     "    print(f'  QUAL        {rs334[5]}')",
     "    print()",
@@ -651,7 +805,7 @@ cells.append(code(
 ))
 
 cells.append(md(
-    "🎉 **Congratulations.** You have just walked an Illumina FASTQ from a real human all the way to a clinically meaningful variant call, using exactly the same software a hospital genetics lab would use. The pipeline you just ran is the foundation of clinical genome sequencing, oncology panel sequencing, prenatal carrier screening, and large-scale studies like the 1000 Genomes Project itself."
+    "🎉 You have just walked an Illumina FASTQ from a real human all the way to a clinically meaningful variant call, using the same software a hospital genetics lab would use."
 ))
 
 # ===================================================================
@@ -659,7 +813,7 @@ cells.append(md(
 # ===================================================================
 cells.append(md(
     "---",
-    "## What we just did, in one table",
+    "## Pipeline summary",
     "",
     "| step | tool | input → output |",
     "| --- | --- | --- |",
@@ -675,21 +829,21 @@ cells.append(md(
     "",
     "## Try it yourself",
     "",
-    "1. **Re-run with a non-carrier sample.** Pick another 1000 Genomes sample (e.g. NA12878, European, almost certainly does not carry rs334) and edit the `wget` URL in the data-download cell. The pipeline will run unchanged but the VCF will not contain a row at HBB:2232.",
-    "2. **Try a homozygote.** A few 1000 Genomes samples are HbSS (homozygous for the sickle allele). Their variant call at HBB:2232 will show genotype `1/1` instead of `0/1`, and their `DP4` field will have zero REF reads.",
-    "3. **Vary the trimming.** Set `--cut_tail_mean_quality` to 30 (more aggressive) or remove the flag entirely. How does this affect the final variant calls? Could over-trimming *miss* a variant?",
-    "4. **Add VEP / SnpEff annotation.** Real clinical pipelines run a final annotator that maps every variant to its consequence (synonymous, missense, splice, …) and looks up its frequency in gnomAD and its clinical record in ClinVar. This is the next step beyond what we did here.",
+    "1. **Run with a non-carrier sample.** Pick another 1000 Genomes sample (e.g. NA12878, European — almost certainly no rs334) and edit the `curl` URL in the data-download cell. The pipeline runs unchanged but the VCF will not contain a row at HBB:2232.",
+    "2. **Try a homozygote.** A few 1000 Genomes samples are HbSS. Their variant call at HBB:2232 will show `1/1` instead of `0/1`, and `DP4` will have zero REF reads.",
+    "3. **Vary the trim aggressiveness.** Set `--cut_tail_mean_quality` to 30 (more aggressive). How do the final variant calls change? Could over-trimming *miss* a variant?",
+    "4. **Add VEP / SnpEff.** Real clinical pipelines run an annotator that maps every variant to its consequence (synonymous / missense / splice / …) and looks up gnomAD frequencies and ClinVar significance.",
     "",
     "## Further reading",
     "",
-    "- **The 1000 Genomes Project Consortium**, *A global reference for human genetic variation*, Nature 526, 68–74 (2015).",
-    "- **Heng Li**, *Aligning sequence reads, clone sequences and assembly contigs with BWA-MEM*, arXiv:1303.3997 (2013).",
-    "- **Petr Danecek et al.**, *Twelve years of SAMtools and BCFtools*, GigaScience 10, giab008 (2021).",
-    "- **HBB / sickle cell** at OMIM 603903, ClinVar VCV000015333, and dbSNP rs334.",
+    "- 1000 Genomes Project Consortium · *A global reference for human genetic variation*, Nature 526, 68–74 (2015)",
+    "- Heng Li · *Aligning sequence reads with BWA-MEM*, arXiv:1303.3997 (2013)",
+    "- Petr Danecek et al. · *Twelve years of SAMtools and BCFtools*, GigaScience 10, giab008 (2021)",
+    "- HBB / sickle cell · OMIM 603903, ClinVar VCV000015333, dbSNP rs334",
     "",
     "---",
     "",
-    "*Notebook prepared by **Han-Ying Jhuang, PhD** for **生技產業研發 III · Biotech Industry R&D III**, Taipei Medical University. Released under MIT for the code and the [1000 Genomes data use policy](https://www.internationalgenome.org/data-portal/data-collection) for the data. Questions or improvements: [hanyingjhuang@tmu.edu.tw](mailto:hanyingjhuang@tmu.edu.tw).*"
+    "*Notebook by **Han-Ying Jhuang, PhD**. Code released under MIT; data redistributed under the [1000 Genomes data use policy](https://www.internationalgenome.org/data-portal/data-collection). Questions or improvements: [hanyingjhuang@tmu.edu.tw](mailto:hanyingjhuang@tmu.edu.tw).*"
 ))
 
 # Build & save
@@ -706,8 +860,6 @@ nb = {
 with open("/tmp/ngs-repo/notebook.ipynb", "w") as f:
     json.dump(nb, f, indent=1)
 
-print(f"wrote {len(cells)} cells")
 n_md   = sum(1 for c in cells if c['cell_type']=='markdown')
 n_code = sum(1 for c in cells if c['cell_type']=='code')
-print(f"  markdown cells: {n_md}")
-print(f"  code cells:     {n_code}")
+print(f"wrote {len(cells)} cells  ({n_md} markdown, {n_code} code)")
