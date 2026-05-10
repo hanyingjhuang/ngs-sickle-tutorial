@@ -1,9 +1,12 @@
+# Local test scripts (not part of the public tutorial)
+run_notebook.py
+
 # Notebook outputs / scratch
 .ipynb_checkpoints/
 __pycache__/
 *.pyc
 
-# Pipeline artifacts (generated when notebook runs)
+# Pipeline artifacts (regenerated when notebook runs)
 data/trimmed.fq
 data/aligned.sam
 data/aligned.bam
