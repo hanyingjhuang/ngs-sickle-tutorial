@@ -2,9 +2,9 @@
 
 設計原則：
 - 程式碼保留英文
-- 解說與圖表標籤改為繁體中文（台灣用語）
+- Markdown 解說與 print() 輸出使用繁體中文（台灣用語）
+- matplotlib 圖表內的標籤保留英文，避免 Colab CJK 字型對齊問題
 - 比英文版更精簡：每步驟僅留 1–2 句說明
-- matplotlib 圖表的中文字型透過 Noto Sans CJK TC 渲染
 """
 import json
 
@@ -25,15 +25,6 @@ def code(*lines, hide=True):
         "source": src,
     }
     return cell
-
-# Common matplotlib config snippet — every schematic prepends this so Chinese
-# characters render in figures. The font is installed in step 0 (apt-get).
-ZH_FONT_SETUP = [
-    "import matplotlib.pyplot as plt",
-    "plt.rcParams['font.sans-serif'] = ['Noto Sans CJK TC', 'Noto Sans TC',",
-    "                                    'Heiti TC', 'PingFang TC', 'DejaVu Sans']",
-    "plt.rcParams['axes.unicode_minus'] = False",
-]
 
 cells = []
 
@@ -73,22 +64,24 @@ cells.append(md(
     "",
     "點擊 **執行階段 → 全部執行 (Runtime → Run all)**，或逐格按 **Shift + Enter**。",
     "",
-    "**程式碼預設摺疊**——學生看到的是結果，點左側細條才會展開原始指令。每個步驟跑的都是 *真正的 Linux 二進位執行檔*（`bwa`、`samtools`、`bcftools`…），不是模擬。"
+    "**程式碼預設摺疊**——學生看到的是結果，點左側細條才會展開原始指令。每個步驟跑的都是 *真正的 Linux 二進位執行檔*（`bwa`、`samtools`、`bcftools`…），不是模擬。",
+    "",
+    "**註**：圖內標籤保留英文（避免 Colab 預設字型缺中文字符），其餘解說與輸出皆為中文。"
 ))
 
 # ===================================================================
-# Step 0: 安裝
+# Step 0
 # ===================================================================
 cells.append(md(
     "## 0 · 環境設定",
     "",
-    "Colab 每次給的是全新的 Linux 機器，先用 `apt-get` 把工具裝起來；同時安裝中文字型，讓圖表能正確顯示繁體中文。"
+    "Colab 每次給的是全新 Linux 機器，先用 `apt-get` 把工具裝上。"
 ))
 
 cells.append(code(
     "%%bash",
     "apt-get -qq update",
-    "apt-get -qq install -y bwa samtools bcftools fastqc fastp fonts-noto-cjk 2>&1 | tail -3",
+    "apt-get -qq install -y bwa samtools bcftools fastqc fastp 2>&1 | tail -3",
     "echo",
     "echo \"--- versions installed ---\"",
     "bwa 2>&1 | grep '^Version'",
@@ -98,22 +91,12 @@ cells.append(code(
     "fastqc   --version"
 ))
 
-cells.append(code(
-    "# 註冊剛裝好的中文字型，後續所有 matplotlib 圖都能顯示繁中",
-    "import matplotlib.font_manager as fm, matplotlib.pyplot as plt",
-    "fm._load_fontmanager(try_read_cache=False)",
-    "plt.rcParams['font.sans-serif'] = ['Noto Sans CJK TC', 'Noto Sans TC',",
-    "                                    'Heiti TC', 'PingFang TC', 'DejaVu Sans']",
-    "plt.rcParams['axes.unicode_minus'] = False",
-    "print('字型設定完成')"
-))
-
 cells.append(md(
     "✅ 看到版本號就代表工具已準備好。"
 ))
 
 # ===================================================================
-# Step 0b: 下載資料
+# Step 0b
 # ===================================================================
 cells.append(md(
     "## 0b · 下載真實資料",
@@ -146,15 +129,15 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import FancyBboxPatch",
     "fig, ax = plt.subplots(figsize=(10, 2.6))",
     "ax.set_xlim(0, 10); ax.set_ylim(0, 5); ax.axis('off')",
     "rows = [",
-    "    (4, '@SRR582169.1324745/1', '第 1 行 — 讀段名稱（@ 開頭）', '#57606a'),",
-    "    (3, 'TGGCTCTGCCCTGACTTTTATGCC...', '第 2 行 — DNA 序列',          '#1f2328'),",
-    "    (2, '+',                              '第 3 行 — 分隔符',          '#57606a'),",
-    "    (1, 'CEFEHFHHGFGHGHFJHHGFGH...',     '第 4 行 — Phred 品質分數',  '#57606a'),",
+    "    (4, '@SRR582169.1324745/1', 'line 1 — read name (after \"@\")', '#57606a'),",
+    "    (3, 'TGGCTCTGCCCTGACTTTTATGCC...',   'line 2 — DNA sequence',           '#1f2328'),",
+    "    (2, '+',                              'line 3 — separator',               '#57606a'),",
+    "    (1, 'CEFEHFHHGFGHGHFJHHGFGH...',     'line 4 — Phred quality string',    '#57606a'),",
     "]",
     "for y, txt, role, c in rows:",
     "    ax.text(0.3, y, txt, family='monospace', fontsize=11, color=c, va='center')",
@@ -162,7 +145,7 @@ cells.append(code(
     "                va='center', arrowprops=dict(arrowstyle='->', color='#bbb', lw=0.7))",
     "ax.add_patch(FancyBboxPatch((0.15, 0.5), 4.3, 4.0, boxstyle='round,pad=0.1',",
     "                            ec='#d0d7de', fc='#f6f8fa', lw=0.8))",
-    "ax.set_title('FASTQ — 一條讀段 = 4 行', loc='left', color='#57606a', fontsize=12)",
+    "ax.set_title('FASTQ — one read = 4 lines', loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
 
@@ -181,7 +164,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "with open('data/reads.fq') as f:",
     "    lines = [next(f).rstrip() for _ in range(8)]",
     "for r in range(2):",
@@ -218,26 +201,26 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle",
     "fig, ax = plt.subplots(figsize=(10, 2.5))",
     "ax.set_xlim(0, 10); ax.set_ylim(0, 4); ax.axis('off')",
     "for i in range(5):",
     "    ax.add_patch(Rectangle((0.5, 3.5 - i*0.5), 1.6, 0.35, fc='#cce5ff', ec='#0969da', lw=0.4))",
-    "ax.text(1.3, 0.6, '所有讀段\\n(reads.fq)', ha='center', fontsize=9, color='#57606a')",
+    "ax.text(1.3, 0.6, 'all reads\\nin reads.fq', ha='center', fontsize=9, color='#57606a')",
     "ax.annotate('', xy=(3.4, 2.2), xytext=(2.3, 2.2),",
     "            arrowprops=dict(arrowstyle='->', color='#0a7c7e', lw=2))",
     "ax.text(2.85, 2.5, 'FastQC', ha='center', fontsize=10, color='#0a7c7e', weight='bold')",
-    "tiles = [('每位置品質', 3.4, '✓', '#1a7f37'),",
-    "         ('GC 含量',     2.5, '✓', '#1a7f37'),",
-    "         ('接頭污染',    1.6, '⚠', '#9a6700'),",
-    "         ('重複序列',    0.7, '✓', '#1a7f37')]",
+    "tiles = [('per-base Q', 3.4, '✓', '#1a7f37'),",
+    "         ('GC content', 2.5, '✓', '#1a7f37'),",
+    "         ('adapter',    1.6, '!', '#9a6700'),",
+    "         ('duplication',0.7, '✓', '#1a7f37')]",
     "for label, y, mark, col in tiles:",
     "    ax.add_patch(Rectangle((4.2, y), 5.0, 0.7, fc='#f6f8fa', ec='#d0d7de', lw=0.5))",
     "    ax.text(4.4, y+0.35, mark, fontsize=14, color=col, va='center')",
     "    ax.text(5.0, y+0.35, label, fontsize=10, color='#1f2328', va='center')",
-    "    ax.text(8.8, y+0.35, '通過' if mark=='✓' else '警告', fontsize=9, color=col, va='center', ha='right')",
-    "ax.set_title('FastQC — 讀進整份 FASTQ，逐項評分', loc='left', color='#57606a', fontsize=12)",
+    "    ax.text(8.8, y+0.35, 'pass' if mark=='✓' else 'warn', fontsize=9, color=col, va='center', ha='right')",
+    "ax.set_title('FastQC — read all FASTQs, score each metric', loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
 
@@ -289,7 +272,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle",
     "import numpy as np",
     "fig, ax = plt.subplots(figsize=(10, 2.6))",
@@ -299,19 +282,19 @@ cells.append(code(
     "colors = ['#1a7f37' if q>=30 else '#9a6700' if q>=20 else '#bf6b00' if q>=10 else '#b1272d' for q in Q]",
     "for i, c in enumerate(colors):",
     "    ax.add_patch(Rectangle((i, 4), 0.95, 0.7, fc=c, ec='none', alpha=0.85))",
-    "ax.text(-1.5, 4.35, '原始', ha='right', fontsize=10, color='#57606a', va='center')",
+    "ax.text(-1.5, 4.35, 'read', ha='right', fontsize=10, color='#57606a', va='center')",
     "cut = n",
     "for i in range(n-4, -1, -1):",
     "    if np.mean(Q[i:i+4]) >= 20:",
     "        cut = i+4; break",
     "ax.plot([cut, cut], [3.7, 5.1], color='#b1272d', lw=2, ls='--')",
-    "ax.text(cut, 5.4, '✂  從這裡剪掉', ha='center', fontsize=10, color='#b1272d')",
+    "ax.text(cut, 5.4, 'cut here', ha='center', fontsize=10, color='#b1272d')",
     "for i in range(cut):",
     "    ax.add_patch(Rectangle((i, 1.6), 0.95, 0.7, fc=colors[i], ec='none', alpha=0.85))",
-    "ax.text(-1.5, 1.95, '保留', ha='right', fontsize=10, color='#1a7f37', va='center')",
-    "ax.text(n+1, 4.35, 'fastp 從 3′ 端滑動 4 鹼基視窗，\\n平均品質 < Q20 即剪除',",
+    "ax.text(-1.5, 1.95, 'kept', ha='right', fontsize=10, color='#1a7f37', va='center')",
+    "ax.text(n+1, 4.35, \"slide a 4-bp window from 3';\\ncut where mean Q < 20\",",
     "        fontsize=9, color='#57606a', va='center')",
-    "ax.set_title('fastp — 滑動視窗 3′ 端品質修剪', loc='left', color='#57606a', fontsize=12)",
+    "ax.set_title(\"fastp — sliding-window 3' quality trim\", loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
 
@@ -334,8 +317,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
-    "import json",
+    "import json, matplotlib.pyplot as plt",
     "qc = json.load(open('data/qc.json'))",
     "before = qc['read1_before_filtering']['quality_curves']['mean']",
     "after  = qc['read1_after_filtering']['quality_curves']['mean']",
@@ -343,20 +325,20 @@ cells.append(code(
     "ax.axhspan(28, 40, color='#1a7f37', alpha=0.07)",
     "ax.axhspan(20, 28, color='#9a6700', alpha=0.10)",
     "ax.axhspan(0,  20, color='#b1272d', alpha=0.07)",
-    "ax.plot(before, '--', color='#b1272d', lw=1.6, label='修剪前')",
-    "ax.plot(after,  '-',  color='#1a7f37', lw=1.6, label='修剪後')",
-    "ax.set_xlabel('讀段位置'); ax.set_ylabel('平均 Phred Q')",
+    "ax.plot(before, '--', color='#b1272d', lw=1.6, label='before trim')",
+    "ax.plot(after,  '-',  color='#1a7f37', lw=1.6, label='after trim')",
+    "ax.set_xlabel('position along read'); ax.set_ylabel('mean Phred Q')",
     "ax.set_ylim(0, 41); ax.legend(loc='lower left', frameon=False)",
     "for s in ['top','right']: ax.spines[s].set_visible(False)",
-    "ax.set_title('每位置平均品質')",
+    "ax.set_title('per-base mean quality')",
     "plt.tight_layout(); plt.show()",
     "b, a = qc['summary']['before_filtering'], qc['summary']['after_filtering']",
-    "print(f\"{'指標':<10} {'修剪前':>14} {'修剪後':>14}\")",
-    "print('-' * 42)",
-    "print(f\"{'讀段數':<10} {b['total_reads']:>14,} {a['total_reads']:>14,}\")",
-    "print(f\"{'鹼基數':<10} {b['total_bases']:>14,} {a['total_bases']:>14,}\")",
-    "print(f\"{'Q30 比率':<10} {b['q30_rate']*100:>13.1f}% {a['q30_rate']*100:>13.1f}%\")",
-    "print(f\"{'GC%':<10} {b['gc_content']*100:>13.1f}% {a['gc_content']*100:>13.1f}%\")"
+    "print(f\"{'指標':<10} {'修剪前':>12} {'修剪後':>12}\")",
+    "print('-' * 40)",
+    "print(f\"讀段數    {b['total_reads']:>12,} {a['total_reads']:>12,}\")",
+    "print(f\"鹼基數    {b['total_bases']:>12,} {a['total_bases']:>12,}\")",
+    "print(f\"Q30 比率  {b['q30_rate']*100:>11.1f}% {a['q30_rate']*100:>11.1f}%\")",
+    "print(f\"GC%      {b['gc_content']*100:>11.1f}% {a['gc_content']*100:>11.1f}%\")"
 ))
 
 cells.append(md(
@@ -372,14 +354,14 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle",
     "import numpy as np",
     "fig, ax = plt.subplots(figsize=(10, 3.5))",
     "ax.set_xlim(0, 70); ax.set_ylim(0, 8); ax.axis('off')",
     "ax.add_patch(Rectangle((2, 5.7), 56, 0.8, fc='#e2e6ea', ec='#57606a', lw=0.5))",
-    "ax.text(1.5, 6.1, '參考', ha='right', fontsize=10, color='#57606a')",
-    "ax.text(30, 7.0, '參考序列（chr11 — HBB 區段）', ha='center', fontsize=9, color='#57606a')",
+    "ax.text(1.5, 6.1, 'REF', ha='right', fontsize=10, color='#57606a')",
+    "ax.text(30, 7.0, 'reference (chr11 — HBB region)', ha='center', fontsize=9, color='#57606a')",
     "np.random.seed(2)",
     "starts = sorted(np.random.choice(range(2, 50), 8, replace=False))",
     "lanes = [0,1,0,1,0,1,0,1]",
@@ -390,10 +372,10 @@ cells.append(code(
     "ax.text(34, 5.0, 'BWA-MEM', fontsize=10, color='#0a7c7e', weight='bold')",
     "for s, lane in zip(starts, lanes):",
     "    ax.add_patch(Rectangle((s, 2.3 - lane*0.7), 8, 0.55, fc='#cce5ff', ec='#0969da', lw=0.4))",
-    "ax.text(1.5, 2.5, '讀段', ha='right', fontsize=10, color='#57606a')",
+    "ax.text(1.5, 2.5, 'reads', ha='right', fontsize=10, color='#57606a')",
     "ax.add_patch(Rectangle((starts[2]+5, 2.3 - lanes[2]*0.7), 0.7, 0.55, fc='#b1272d', ec='none'))",
-    "ax.text(60, 1.7, '◀ 不一致鹼基（可能變異）', fontsize=9, color='#b1272d', va='center')",
-    "ax.set_title('BWA-MEM — 為每條讀段找最佳對應位置',",
+    "ax.text(60, 1.7, '* mismatch (potential variant)', fontsize=9, color='#b1272d', va='center')",
+    "ax.set_title('BWA-MEM — find best position on REF for each read',",
     "             loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
@@ -429,7 +411,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle",
     "import numpy as np",
     "fig, ax = plt.subplots(figsize=(10, 2.7))",
@@ -437,16 +419,16 @@ cells.append(code(
     "np.random.seed(7)",
     "starts_random = np.random.choice(range(2, 48), 8, replace=False)",
     "starts_sorted = sorted(starts_random)",
-    "ax.text(-1.5, 4.0, '未排序 SAM', fontsize=10, color='#57606a')",
+    "ax.text(-1.5, 4.0, 'unsorted SAM', fontsize=10, color='#57606a')",
     "for i, s in enumerate(starts_random):",
     "    ax.add_patch(Rectangle((s, 3.5 - (i%4)*0.25), 5, 0.18, fc='#cce5ff', ec='#0969da', lw=0.4))",
     "ax.annotate('', xy=(30, 2.4), xytext=(30, 3.1),",
     "            arrowprops=dict(arrowstyle='->', color='#0a7c7e', lw=2))",
     "ax.text(33, 2.7, 'samtools sort + index', fontsize=10, color='#0a7c7e', weight='bold')",
-    "ax.text(-1.5, 1.8, '已排序 BAM (附 .bai)', fontsize=10, color='#57606a')",
+    "ax.text(-1.5, 1.8, 'sorted BAM (+ .bai)', fontsize=10, color='#57606a')",
     "for i, s in enumerate(starts_sorted):",
     "    ax.add_patch(Rectangle((s, 1.3 - (i%4)*0.25), 5, 0.18, fc='#cce5ff', ec='#0969da', lw=0.4))",
-    "ax.set_title('依位置排序，下游工具才能快速串流',",
+    "ax.set_title('sort by position so callers can stream through quickly',",
     "             loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
@@ -468,8 +450,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
-    "import subprocess",
+    "import subprocess, matplotlib.pyplot as plt",
     "raw = subprocess.check_output(['samtools', 'depth', '-a', 'data/aligned.bam'], text=True)",
     "rows = [l.split('\\t') for l in raw.strip().split('\\n') if l]",
     "pos = [int(r[1]) for r in rows]",
@@ -478,12 +459,12 @@ cells.append(code(
     "fig, ax = plt.subplots(figsize=(11, 3))",
     "ax.fill_between(pos, dep, color='#0a7c7e', alpha=0.4)",
     "ax.plot(pos, dep, color='#0a7c7e', lw=0.9)",
-    "ax.axvline(RS334, color='#b1272d', lw=1, ls='--', label='rs334 (鐮刀位點)')",
-    "ax.set_xlabel('HBB 區段位置 (chr11:5,246,001-5,250,000, GRCh37)')",
-    "ax.set_ylabel('讀段深度')",
+    "ax.axvline(RS334, color='#b1272d', lw=1, ls='--', label='rs334 (HbS)')",
+    "ax.set_xlabel('position on HBB region (chr11:5,246,001-5,250,000, GRCh37)')",
+    "ax.set_ylabel('read depth')",
     "ax.legend(loc='upper right', frameon=False)",
     "for s in ['top','right']: ax.spines[s].set_visible(False)",
-    "ax.set_title('HBB 區域覆蓋深度')",
+    "ax.set_title('coverage across HBB')",
     "plt.tight_layout(); plt.show()",
     "print(f'平均深度：{sum(dep)/len(dep):.1f}x')",
     "print(f'有讀段覆蓋的位置：{sum(1 for d in dep if d):,} / {len(dep):,}')"
@@ -502,7 +483,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle",
     "fig, ax = plt.subplots(figsize=(10, 3.6))",
     "ax.set_xlim(-1, 13); ax.set_ylim(0, 7); ax.axis('off')",
@@ -511,22 +492,22 @@ cells.append(code(
     "for i, b in enumerate(REF):",
     "    ax.add_patch(Rectangle((i, 5.7), 0.92, 0.7, fc='#e2e6ea', ec='#d0d7de', lw=0.4))",
     "    ax.text(i+0.46, 6.05, b, ha='center', va='center', family='monospace', fontsize=11, color=cmap[b])",
-    "ax.text(-0.5, 6.05, '參考', ha='right', va='center', fontsize=10, color='#57606a')",
-    "stack = ['·····A···   ', '·····T···   ', '·····A···   ', '·····A···   ', '·····T···   ']",
+    "ax.text(-0.5, 6.05, 'REF', ha='right', va='center', fontsize=10, color='#57606a')",
+    "stack = ['*****A***   ', '*****T***   ', '*****A***   ', '*****A***   ', '*****T***   ']",
     "for k, row in enumerate(stack):",
     "    for i, b in enumerate(row):",
     "        if b == ' ': continue",
-    "        is_match = b == '·'",
+    "        is_match = b == '*'",
     "        ax.add_patch(Rectangle((i, 4.6-k*0.6), 0.92, 0.55,",
     "                               fc=cmap.get(b,'#aaa') if not is_match else '#f6f8fa',",
     "                               ec='#d0d7de', lw=0.3))",
     "        if not is_match:",
     "            ax.text(i+0.46, 4.6-k*0.6+0.27, b, ha='center', va='center', family='monospace',",
     "                    fontsize=11, color='white', weight='bold')",
-    "ax.text(-0.5, 4.0, '讀段', ha='right', va='center', fontsize=10, color='#57606a')",
+    "ax.text(-0.5, 4.0, 'reads', ha='right', va='center', fontsize=10, color='#57606a')",
     "ax.add_patch(Rectangle((4.96, 1.4), 1, 5.2, fill=False, ec='#b1272d', lw=1.4, ls='--'))",
-    "ax.text(5.46, 0.9, '鹼基不一致 = 變異', ha='center', fontsize=9, color='#b1272d')",
-    "ax.set_title('mpileup — 把每個參考位置「轉置」成一欄',",
+    "ax.text(5.46, 0.9, 'mismatched bases here = variant', ha='center', fontsize=9, color='#b1272d')",
+    "ax.set_title('mpileup — column-wise view of every reference position',",
     "             loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
@@ -553,7 +534,7 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle",
     "rows = []",
     "with open('data/pileup.txt') as f:",
@@ -596,7 +577,8 @@ cells.append(code(
     "ax.set_xticks(range(len(rows)))",
     "ax.set_xticklabels([str(r[0]) for r in rows], rotation=90, fontsize=8)",
     "ax.set_yticks([]); ax.set_xlim(-1, len(rows)); ax.set_ylim(-1, max_stack+2.5)",
-    "ax.set_title('堆疊圖視窗 — 上排為參考序列，下方為讀段；紅框 = rs334', fontsize=11)",
+    "ax.set_title('pileup window — REF row at top, reads stacked below; '",
+    "             + 'red box = rs334', fontsize=11)",
     "for s in ax.spines.values(): s.set_visible(False)",
     "plt.tight_layout(); plt.show()"
 ))
@@ -614,13 +596,13 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle, FancyBboxPatch",
     "fig, ax = plt.subplots(figsize=(10, 3.0))",
     "ax.set_xlim(0, 14); ax.set_ylim(0, 6); ax.axis('off')",
     "ax.add_patch(Rectangle((1, 4.6), 0.7, 0.6, fc='#e2e6ea', ec='#d0d7de'))",
     "ax.text(1.35, 4.9, 'T', ha='center', va='center', family='monospace', fontsize=12, color='#b1272d', weight='bold')",
-    "ax.text(0.6, 4.9, '參考', ha='right', va='center', fontsize=9, color='#57606a')",
+    "ax.text(0.6, 4.9, 'REF', ha='right', va='center', fontsize=9, color='#57606a')",
     "stack = ['T','A','T','A','A']",
     "cmap = {'A':'#1a7f37','T':'#b1272d'}",
     "for k, b in enumerate(stack):",
@@ -629,8 +611,8 @@ cells.append(code(
     "    if b != 'T':",
     "        ax.text(1.35, 3.8-k*0.55+0.25, b, ha='center', va='center', family='monospace', color='white', weight='bold')",
     "    else:",
-    "        ax.text(1.35, 3.8-k*0.55+0.25, '·', ha='center', va='center', family='monospace', color='#aaa')",
-    "ax.text(1.35, 0.6, 'HBB:2232\\n位置的堆疊欄', ha='center', fontsize=9, color='#57606a')",
+    "        ax.text(1.35, 3.8-k*0.55+0.25, '*', ha='center', va='center', family='monospace', color='#aaa')",
+    "ax.text(1.35, 0.6, 'pileup column\\nat HBB:2232', ha='center', fontsize=9, color='#57606a')",
     "ax.annotate('', xy=(5.5, 3.5), xytext=(2.6, 3.5),",
     "            arrowprops=dict(arrowstyle='->', color='#0a7c7e', lw=2))",
     "ax.text(4.05, 3.9, 'bcftools', ha='center', fontsize=10, color='#0a7c7e', weight='bold')",
@@ -638,8 +620,8 @@ cells.append(code(
     "                            fc='#f6f8fa', ec='#d0d7de'))",
     "ax.text(6.3, 3.85, 'CHROM  POS    REF  ALT  QUAL  GT', family='monospace', fontsize=9, color='#57606a')",
     "ax.text(6.3, 3.30, 'HBB    2232   T    A    105   0/1', family='monospace', fontsize=11, color='#1f2328')",
-    "ax.text(9.75, 0.6, 'variants.vcf 中的一行', ha='center', fontsize=9, color='#57606a')",
-    "ax.set_title('bcftools — 把堆疊機率轉成變異呼叫 (VCF)',",
+    "ax.text(9.75, 0.6, 'one row of variants.vcf', ha='center', fontsize=9, color='#57606a')",
+    "ax.set_title('bcftools — pileup likelihoods to variant calls (VCF)',",
     "             loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
@@ -671,39 +653,40 @@ cells.append(md(
 ))
 
 cells.append(code(
-    *ZH_FONT_SETUP,
+    "import matplotlib.pyplot as plt",
     "from matplotlib.patches import Rectangle, FancyBboxPatch",
     "fig, ax = plt.subplots(figsize=(11, 3.6))",
     "ax.set_xlim(0, 14); ax.set_ylim(0, 7); ax.axis('off')",
     "cmap = {'A':'#1a7f37','T':'#b1272d','C':'#0969da','G':'#9a6700'}",
-    "ax.text(0.3, 5.7, 'REF cDNA 第 7 密碼子：', fontsize=10, color='#57606a')",
+    "ax.text(0.3, 5.7, 'REF cDNA codon 7:', fontsize=10, color='#57606a')",
     "for i, b in enumerate('GAG'):",
-    "    ax.add_patch(Rectangle((4.8 + i*0.7, 5.4), 0.65, 0.7, fc=cmap[b], alpha=0.2, ec=cmap[b]))",
-    "    ax.text(4.8 + i*0.7 + 0.32, 5.75, b, ha='center', va='center', family='monospace', fontsize=12, color=cmap[b], weight='bold')",
-    "ax.annotate('', xy=(8.3, 5.75), xytext=(7.2, 5.75), arrowprops=dict(arrowstyle='->', color='#57606a'))",
-    "ax.add_patch(FancyBboxPatch((8.5, 5.4), 2.4, 0.7, boxstyle='round,pad=0.05', fc='#f6f8fa', ec='#d0d7de'))",
-    "ax.text(9.7, 5.75, 'Glu (麩胺酸)', ha='center', va='center', fontsize=11, color='#1f2328')",
-    "ax.text(11.2, 5.75, '正常 β-球蛋白', va='center', fontsize=10, color='#57606a')",
+    "    ax.add_patch(Rectangle((4.5 + i*0.7, 5.4), 0.65, 0.7, fc=cmap[b], alpha=0.2, ec=cmap[b]))",
+    "    ax.text(4.5 + i*0.7 + 0.32, 5.75, b, ha='center', va='center', family='monospace', fontsize=12, color=cmap[b], weight='bold')",
+    "ax.annotate('', xy=(8.0, 5.75), xytext=(6.9, 5.75), arrowprops=dict(arrowstyle='->', color='#57606a'))",
+    "ax.add_patch(FancyBboxPatch((8.2, 5.4), 2.4, 0.7, boxstyle='round,pad=0.05', fc='#f6f8fa', ec='#d0d7de'))",
+    "ax.text(9.4, 5.75, 'Glu (E)', ha='center', va='center', fontsize=11, color='#1f2328')",
+    "ax.text(11.0, 5.75, 'normal beta-globin', va='center', fontsize=10, color='#57606a')",
     "ax.annotate('', xy=(8.0, 4.0), xytext=(8.0, 5.2), arrowprops=dict(arrowstyle='->', color='#b1272d', lw=2))",
-    "ax.text(8.3, 4.6, 'rs334 — 單一鹼基 A→T (cDNA)', fontsize=9, color='#b1272d')",
-    "ax.text(0.3, 3.3, 'ALT cDNA 第 7 密碼子：', fontsize=10, color='#57606a')",
+    "ax.text(8.3, 4.6, 'rs334 -- single base A>T (cDNA)', fontsize=9, color='#b1272d')",
+    "ax.text(0.3, 3.3, 'ALT cDNA codon 7:', fontsize=10, color='#57606a')",
     "for i, b in enumerate('GTG'):",
     "    fc = '#b1272d' if i == 1 else cmap[b]",
     "    alpha = 0.5 if i == 1 else 0.2",
-    "    ax.add_patch(Rectangle((4.8 + i*0.7, 3.0), 0.65, 0.7, fc=fc, alpha=alpha, ec=cmap[b]))",
-    "    ax.text(4.8 + i*0.7 + 0.32, 3.35, b, ha='center', va='center', family='monospace', fontsize=12, color=cmap[b], weight='bold')",
-    "ax.annotate('', xy=(8.3, 3.35), xytext=(7.2, 3.35), arrowprops=dict(arrowstyle='->', color='#57606a'))",
-    "ax.add_patch(FancyBboxPatch((8.5, 3.0), 2.4, 0.7, boxstyle='round,pad=0.05', fc='#f6f8fa', ec='#b1272d', lw=1.5))",
-    "ax.text(9.7, 3.35, 'Val (纈胺酸)', ha='center', va='center', fontsize=11, color='#b1272d', weight='bold')",
-    "ax.text(11.2, 3.35, 'HbS β-球蛋白', va='center', fontsize=10, color='#b1272d')",
+    "    ax.add_patch(Rectangle((4.5 + i*0.7, 3.0), 0.65, 0.7, fc=fc, alpha=alpha, ec=cmap[b]))",
+    "    ax.text(4.5 + i*0.7 + 0.32, 3.35, b, ha='center', va='center', family='monospace', fontsize=12, color=cmap[b], weight='bold')",
+    "ax.annotate('', xy=(8.0, 3.35), xytext=(6.9, 3.35), arrowprops=dict(arrowstyle='->', color='#57606a'))",
+    "ax.add_patch(FancyBboxPatch((8.2, 3.0), 2.4, 0.7, boxstyle='round,pad=0.05', fc='#f6f8fa', ec='#b1272d', lw=1.5))",
+    "ax.text(9.4, 3.35, 'Val (V)', ha='center', va='center', fontsize=11, color='#b1272d', weight='bold')",
+    "ax.text(11.0, 3.35, 'HbS beta-globin', va='center', fontsize=10, color='#b1272d')",
     "ax.add_patch(FancyBboxPatch((0.3, 0.4), 13.4, 1.7, boxstyle='round,pad=0.05',",
     "                            fc='#fff5f5', ec='#b1272d', lw=1.0))",
-    "ax.text(0.7, 1.55, '🩸 表現型：', fontsize=11, color='#b1272d', weight='bold')",
+    "ax.text(0.7, 1.55, 'Phenotype:', fontsize=11, color='#b1272d', weight='bold')",
     "ax.text(0.7, 1.05,",
-    "        '雜合 (HbAS) → 鐮刀型基因帶因者（無症狀，有抗瘧疾保護）   ·   '",
-    "        '同合 (HbSS) → 鐮刀型細胞貧血症',",
+    "        'het (HbAS) -> sickle cell trait (carrier, malaria-protective)   |   '",
+    "        'hom (HbSS) -> sickle cell anaemia',",
     "        fontsize=10, color='#1f2328')",
-    "ax.set_title('rs334 — 鐮刀型細胞貧血症的分子基礎', loc='left', color='#57606a', fontsize=12)",
+    "ax.set_title('rs334 -- molecular basis of sickle cell disease',",
+    "             loc='left', color='#57606a', fontsize=12)",
     "plt.tight_layout(); plt.show()"
 ))
 
