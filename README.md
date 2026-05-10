@@ -66,6 +66,12 @@ cd ngs-sickle-tutorial
 jupyter notebook notebook.ipynb
 ```
 
+## Author
+
+**Han-Ying Jhuang (莊漢英), PhD**  
+Assistant Professor, Taipei Medical University (臺北醫學大學)  
+[hanyingjhuang@tmu.edu.tw](mailto:hanyingjhuang@tmu.edu.tw)
+
 ## License
 
 Code: MIT.  

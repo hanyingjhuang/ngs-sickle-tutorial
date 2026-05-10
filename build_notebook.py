@@ -38,7 +38,7 @@ cells = []
 cells.append(md(
     "# NGS pipeline — from raw reads to a clinical variant",
     "",
-    "**Author** · Han-Ying Jhuang, PhD  ",
+    "**Author** · Han-Ying Jhuang (莊漢英), PhD — Assistant Professor, Taipei Medical University  ",
     "**Contact** · hanyingjhuang@tmu.edu.tw",
     "",
     "---",
@@ -843,7 +843,7 @@ cells.append(md(
     "",
     "---",
     "",
-    "*Notebook by **Han-Ying Jhuang, PhD**. Code released under MIT; data redistributed under the [1000 Genomes data use policy](https://www.internationalgenome.org/data-portal/data-collection). Questions or improvements: [hanyingjhuang@tmu.edu.tw](mailto:hanyingjhuang@tmu.edu.tw).*"
+    "*Notebook by **Han-Ying Jhuang (莊漢英), PhD** — Assistant Professor, Taipei Medical University. Code released under MIT; data redistributed under the [1000 Genomes data use policy](https://www.internationalgenome.org/data-portal/data-collection). Questions or improvements: [hanyingjhuang@tmu.edu.tw](mailto:hanyingjhuang@tmu.edu.tw).*"
 ))
 
 # Build & save

@@ -43,7 +43,7 @@ cells = []
 cells.append(md(
     "# NGS 變異分析流程 — 從原始定序資料到臨床變異",
     "",
-    "**作者** · 莊涵盈 博士  ",
+    "**作者** · 莊漢英 助理教授・臺北醫學大學  ",
     "**聯絡** · hanyingjhuang@tmu.edu.tw",
     "",
     "---",
@@ -778,7 +778,7 @@ cells.append(md(
     "",
     "---",
     "",
-    "*筆記：**莊涵盈 博士**。程式碼以 MIT 授權；資料依[千人基因組計畫資料使用政策](https://www.internationalgenome.org/data-portal/data-collection)再散布。意見回饋歡迎來信 [hanyingjhuang@tmu.edu.tw](mailto:hanyingjhuang@tmu.edu.tw).*"
+    "*筆記：**莊漢英 助理教授**・臺北醫學大學。程式碼以 MIT 授權；資料依[千人基因組計畫資料使用政策](https://www.internationalgenome.org/data-portal/data-collection)再散布。意見回饋歡迎來信 [hanyingjhuang@tmu.edu.tw](mailto:hanyingjhuang@tmu.edu.tw).*"
 ))
 
 # Build & save
