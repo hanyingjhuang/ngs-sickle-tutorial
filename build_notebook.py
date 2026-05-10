@@ -69,8 +69,6 @@ cells.append(md(
     "1. Click **Runtime → Run all** to run every step automatically, *or*",
     "2. Click each cell and press **Shift + Enter** to step through one at a time.",
     "",
-    "Code is **hidden by default** so you focus on the biology. Click the small bar at the left of any code cell to reveal the commands. Every command runs *real Linux binaries* (`bwa`, `samtools`, `bcftools`, …) on a free Google cloud VM — exactly the software a lab workstation would use.",
-    "",
     "## Learning objectives",
     "",
     "1. Read a FASTQ file and explain its 4-line structure.",
